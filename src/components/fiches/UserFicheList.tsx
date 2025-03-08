@@ -117,7 +117,19 @@ export function UserFicheList() {
       cadastreSection: newFiche.cadastreSection,
       cadastreNumber: newFiche.cadastreNumber,
       completion: 10, // valeur initiale
-      lastUpdated: new Date().toISOString().split('T')[0]
+      lastUpdated: new Date().toISOString().split('T')[0],
+      // Initialiser les entrées cadastrales avec une entrée vide pour que le module soit directement accessible
+      cadastreEntries: [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          parcelle: newFiche.cadastreNumber,
+          adresse: newFiche.address,
+          section: newFiche.cadastreSection,
+          surface: '',
+        }
+      ],
+      // Initialiser les valeurs de complétion pour le cadastre
+      cadastreCompletion: 25 // Valeur initiale car les champs principaux sont déjà remplis
     };
     
     // Ajouter la fiche à la liste
@@ -138,7 +150,7 @@ export function UserFicheList() {
     
     toast({
       title: "Fiche créée avec succès",
-      description: "La fiche a été ajoutée à votre liste",
+      description: "La fiche a été ajoutée à votre liste avec le module Cadastre initialisé",
     });
     
     // Naviguer vers la nouvelle fiche

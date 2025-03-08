@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -52,11 +51,9 @@ const features = [
 ];
 
 const Index = () => {
-  // Refs for animation elements
   const heroRef = useRef<HTMLDivElement>(null);
   const featureRefs = useRef<(HTMLDivElement | null)[]>([]);
   
-  // State for showing/hiding features section
   const [showFeatures, setShowFeatures] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newFiche, setNewFiche] = useState({
@@ -65,31 +62,24 @@ const Index = () => {
     cadastreNumber: ''
   });
   
-  // Mock state for logged-in user (replace with actual authentication state)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  // Mise à jour des valeurs des champs
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setNewFiche(prev => ({ ...prev, [name]: value }));
   };
   
-  // Toggle the visibility of features
   const toggleFeatures = () => {
     if (isLoggedIn) {
-      // Quand l'utilisateur est connecté, ouvrir le dialogue de création de fiche
       setIsDialogOpen(true);
     } else {
-      // Sinon, afficher la section des fonctionnalités
       setShowFeatures(!showFeatures);
     }
   };
   
-  // Gestion de la création d'une nouvelle fiche
   const handleSubmitFiche = () => {
-    // Vérifier que tous les champs sont remplis
     if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
       toast({
         title: "Champs incomplets",
@@ -99,26 +89,32 @@ const Index = () => {
       return;
     }
     
-    // Créer la nouvelle fiche
     const newId = Date.now().toString();
     const createdFiche = {
       id: newId,
       address: newFiche.address,
       cadastreSection: newFiche.cadastreSection,
       cadastreNumber: newFiche.cadastreNumber,
-      completion: 10, // valeur initiale
-      lastUpdated: new Date().toISOString().split('T')[0]
+      completion: 10,
+      lastUpdated: new Date().toISOString().split('T')[0],
+      cadastreEntries: [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          parcelle: newFiche.cadastreNumber,
+          adresse: newFiche.address,
+          section: newFiche.cadastreSection,
+          surface: '',
+        }
+      ],
+      cadastreCompletion: 25
     };
     
-    // Récupérer les fiches existantes et ajouter la nouvelle
     const storedFiches = localStorage.getItem('userFiches');
     let fiches = storedFiches ? JSON.parse(storedFiches) : [];
     fiches = [...fiches, createdFiche];
     
-    // Sauvegarder dans localStorage (à remplacer par Supabase)
     localStorage.setItem('userFiches', JSON.stringify(fiches));
     
-    // Réinitialiser le formulaire et fermer la boîte de dialogue
     setNewFiche({
       address: '',
       cadastreSection: '',
@@ -128,16 +124,13 @@ const Index = () => {
     
     toast({
       title: "Fiche créée avec succès",
-      description: "La fiche a été ajoutée à votre liste",
+      description: "La fiche a été ajoutée à votre liste avec le module Cadastre initialisé",
     });
     
-    // Naviguer vers la nouvelle fiche
     navigate(`/fiche/${newId}`);
   };
   
-  // Simulate login check (replace with actual auth logic)
   useEffect(() => {
-    // Mock login check - replace with actual auth check
     const checkLoginStatus = () => {
       const mockLoggedIn = localStorage.getItem('mockUserLoggedIn') === 'true';
       setIsLoggedIn(mockLoggedIn);
@@ -145,8 +138,6 @@ const Index = () => {
     
     checkLoginStatus();
     
-    // For demo purposes only - to toggle mock login state
-    // Remove this in production and replace with actual auth
     const loginToggleBtn = document.getElementById('mock-login-toggle');
     if (loginToggleBtn) {
       loginToggleBtn.addEventListener('click', () => {
@@ -157,7 +148,6 @@ const Index = () => {
     }
   }, []);
   
-  // Intersection Observer for animations
   useEffect(() => {
     const observerOptions = {
       root: null,
@@ -197,7 +187,6 @@ const Index = () => {
   
   return (
     <PageLayout>
-      {/* Hero Section */}
       <section 
         ref={heroRef} 
         className="opacity-0 py-20 md:py-32 text-center"
@@ -210,7 +199,6 @@ const Index = () => {
             Optimisez vos projets immobiliers grâce à notre plateforme intuitive d'analyse et de gestion
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            {/* Bouton principal "Créer sa Fiche" */}
             <Button 
               size="lg" 
               className="bg-brand hover:bg-brand-dark flex items-center gap-2" 
@@ -229,7 +217,6 @@ const Index = () => {
               </Link>
             )}
             
-            {/* For demo only - remove in production */}
             <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
               {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
             </Button>
@@ -237,7 +224,6 @@ const Index = () => {
         </div>
       </section>
       
-      {/* Dialogue pour créer une nouvelle fiche */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -296,7 +282,6 @@ const Index = () => {
         </DialogContent>
       </Dialog>
       
-      {/* User's Fiches Section - Only shown when user is logged in */}
       {isLoggedIn && (
         <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">
           <div className="text-center mb-10">
@@ -310,7 +295,6 @@ const Index = () => {
         </section>
       )}
       
-      {/* Features Grid - Only shown when showFeatures is true */}
       {showFeatures && (
         <section className="py-20 bg-gray-50 rounded-3xl">
           <div className="text-center mb-16">
@@ -350,7 +334,6 @@ const Index = () => {
         </section>
       )}
       
-      {/* CTA Section */}
       <section className="py-20">
         <div className="bg-gradient-to-r from-brand/90 to-brand text-white rounded-2xl p-10 md:p-16 text-center md:text-left md:flex items-center justify-between">
           <div className="md:max-w-xl">

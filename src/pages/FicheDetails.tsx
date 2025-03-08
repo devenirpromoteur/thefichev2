@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -11,8 +10,15 @@ import { useToast } from '@/hooks/use-toast';
 import { CadastreTable } from '@/components/cadastre/CadastreTable';
 import { TableActions } from '@/components/cadastre/TableActions';
 import { TotalSurface } from '@/components/cadastre/TotalSurface';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
-// Type definition for a fiche
 interface Fiche {
   id: string;
   address: string;
@@ -20,10 +26,21 @@ interface Fiche {
   cadastreNumber: string;
   completion: number;
   lastUpdated: string;
+  
   zone?: string;
   empriseAuSol?: number;
   hauteurMax?: number;
   espacesVerts?: number;
+  stationnement?: string;
+  
+  bandePrincipale?: string;
+  bandeSecondaire?: string;
+  implantationVoies?: string;
+  implantationLimites?: string;
+  retraitLimites?: string;
+  implantationTerrain?: string;
+  respirationBati?: string;
+  
   occupants?: Array<{ type: string; nombre: number; statut: string }>;
   surfacePlancher?: number;
   logements?: number;
@@ -35,7 +52,6 @@ interface Fiche {
   logementsSociaux?: number;
 }
 
-// Type pour les entrées du cadastre
 interface CadastreEntry {
   id: string;
   parcelle: string;
@@ -48,21 +64,18 @@ export default function FicheDetails() {
   const { ficheId } = useParams<{ ficheId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('cadastre'); // Changer le tab par défaut
+  const [activeTab, setActiveTab] = useState('cadastre');
   const [isEditing, setIsEditing] = useState(false);
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Ajout des states pour le module Cadastre
   const [entries, setEntries] = useState<CadastreEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
-  // Charger la fiche depuis localStorage (au lieu de Supabase pour l'instant)
   useEffect(() => {
     const loadFiche = async () => {
       setLoading(true);
       try {
-        // Simuler un délai de chargement
         await new Promise(resolve => setTimeout(resolve, 300));
         
         const storedFiches = localStorage.getItem('userFiches');
@@ -71,13 +84,22 @@ export default function FicheDetails() {
           const foundFiche = fiches.find(f => f.id === ficheId);
           
           if (foundFiche) {
-            // Ajouter des propriétés par défaut si elles n'existent pas
             setFiche({
               ...foundFiche,
               zone: foundFiche.zone || 'UA',
               empriseAuSol: foundFiche.empriseAuSol || 70,
-              hauteurMax: foundFiche.hauteurMax || 12,
+              hauteurMax: foundFiche.hauteurMax || 14,
               espacesVerts: foundFiche.espacesVerts || 20,
+              stationnement: foundFiche.stationnement || 'À définir selon la règle',
+              
+              bandePrincipale: foundFiche.bandePrincipale || '',
+              bandeSecondaire: foundFiche.bandeSecondaire || '',
+              implantationVoies: foundFiche.implantationVoies || '',
+              implantationLimites: foundFiche.implantationLimites || '',
+              retraitLimites: foundFiche.retraitLimites || '',
+              implantationTerrain: foundFiche.implantationTerrain || '',
+              respirationBati: foundFiche.respirationBati || '',
+              
               occupants: foundFiche.occupants || [
                 { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
                 { type: 'Locataires', nombre: 3, statut: 'Famille' }
@@ -92,14 +114,12 @@ export default function FicheDetails() {
               }
             });
             
-            // Récupérer les entrées cadastrales existantes ou initialiser
             const fiches2 = JSON.parse(storedFiches);
             const currentFiche = fiches2.find((f: any) => f.id === ficheId);
             
             if (currentFiche && currentFiche.cadastreEntries) {
               setEntries(currentFiche.cadastreEntries);
             } else {
-              // Initialiser avec une entrée basée sur les données de la fiche
               handleAddEntry();
             }
           }
@@ -119,7 +139,6 @@ export default function FicheDetails() {
     loadFiche();
   }, [ficheId, toast]);
   
-  // Fonction pour ajouter une entrée de cadastre
   const handleAddEntry = () => {
     const newEntry: CadastreEntry = {
       id: Math.random().toString(36).substring(2, 9),
@@ -132,7 +151,6 @@ export default function FicheDetails() {
     setEntries(prev => [...prev, newEntry]);
   };
 
-  // Fonction pour supprimer une entrée de cadastre
   const handleDeleteEntry = () => {
     if (!selectedRow) {
       toast({
@@ -152,21 +170,18 @@ export default function FicheDetails() {
     });
   };
 
-  // Fonction pour gérer les changements dans les champs du cadastre
   const handleInputChange = (id: string, field: keyof Omit<CadastreEntry, 'id'>, value: string) => {
     setEntries(prev => prev.map(entry => 
       entry.id === id ? { ...entry, [field]: value } : entry
     ));
   };
 
-  // Sauvegarde automatique des entrées cadastrales
   useEffect(() => {
     if (ficheId && entries.length > 0) {
       saveToLocalStorage();
     }
   }, [entries]);
 
-  // Fonction pour calculer la surface totale
   const getTotalSurface = () => {
     return entries.reduce((total, entry) => {
       const surface = parseFloat(entry.surface) || 0;
@@ -174,14 +189,12 @@ export default function FicheDetails() {
     }, 0);
   };
 
-  // Fonction pour sauvegarder les données dans localStorage
   const saveToLocalStorage = () => {
     const storedFiches = localStorage.getItem('userFiches');
     if (storedFiches && ficheId) {
       const fiches = JSON.parse(storedFiches);
       const updatedFiches = fiches.map((fiche: any) => {
         if (fiche.id === ficheId) {
-          // Calculer la complétion pour la section cadastre
           const filledFields = entries.reduce((count, entry) => {
             let fieldCount = 0;
             if (entry.section) fieldCount++;
@@ -200,7 +213,6 @@ export default function FicheDetails() {
             ...fiche,
             cadastreEntries: entries,
             cadastreCompletion: cadastreCompletion,
-            // Mise à jour de la complétion globale
             completion: calculateOverallCompletion(fiche, cadastreCompletion)
           };
         }
@@ -217,9 +229,7 @@ export default function FicheDetails() {
     }
   };
 
-  // Fonction pour calculer la complétion globale
   const calculateOverallCompletion = (fiche: any, cadastreCompletion: number) => {
-    // Définir les poids pour chaque section
     const weights = {
       cadastre: 0.2,
       plu: 0.2,
@@ -227,7 +237,6 @@ export default function FicheDetails() {
       projet: 0.4
     };
     
-    // Obtenir les valeurs de complétion pour chaque section
     const completions = {
       cadastre: cadastreCompletion,
       plu: fiche.pluCompletion || 0,
@@ -235,15 +244,63 @@ export default function FicheDetails() {
       projet: fiche.projetCompletion || 0
     };
     
-    // Calculer la moyenne pondérée
     const weightedSum = Object.keys(weights).reduce((sum, section) => {
       return sum + (completions[section as keyof typeof completions] * weights[section as keyof typeof weights]);
     }, 0);
     
     return Math.round(weightedSum);
   };
-  
-  // Gestion des actions utilisateur
+
+  const handleInputChangeForFiche = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    if (!fiche) return;
+    
+    const { name, value } = e.target;
+    
+    if (name.includes('.')) {
+      const [parent, child] = name.split('.');
+      setFiche({
+        ...fiche,
+        [parent]: {
+          ...fiche[parent as keyof Fiche] as object,
+          [child]: value
+        }
+      });
+    } else {
+      setFiche({
+        ...fiche,
+        [name]: value
+      });
+    }
+    
+    saveFicheToLocalStorage({
+      ...fiche,
+      [name]: value
+    });
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    if (!fiche) return;
+    
+    setFiche({
+      ...fiche,
+      [name]: value
+    });
+    
+    saveFicheToLocalStorage({
+      ...fiche,
+      [name]: value
+    });
+  };
+
+  const saveFicheToLocalStorage = (updatedFiche: Fiche) => {
+    const storedFiches = localStorage.getItem('userFiches');
+    if (storedFiches) {
+      const fiches: Fiche[] = JSON.parse(storedFiches);
+      const updatedFiches = fiches.map(f => f.id === ficheId ? updatedFiche : f);
+      localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+    }
+  };
+
   const handleEdit = () => {
     setIsEditing(true);
     toast({
@@ -251,11 +308,10 @@ export default function FicheDetails() {
       description: "Vous pouvez maintenant modifier les informations de cette fiche"
     });
   };
-  
+
   const handleSave = () => {
     if (!fiche) return;
     
-    // Calculer le pourcentage de complétion
     const fieldsToCheck = [
       fiche.address, 
       fiche.cadastreSection, 
@@ -272,14 +328,12 @@ export default function FicheDetails() {
     const nonEmptyFields = fieldsToCheck.filter(field => field !== undefined && field !== '').length;
     const completionPercentage = Math.round((nonEmptyFields / fieldsToCheck.length) * 100);
     
-    // Mettre à jour la fiche avec le nouveau pourcentage de complétion
     const updatedFiche = {
       ...fiche,
       completion: completionPercentage,
       lastUpdated: new Date().toISOString().split('T')[0]
     };
     
-    // Sauvegarder dans localStorage
     const storedFiches = localStorage.getItem('userFiches');
     if (storedFiches) {
       const fiches: Fiche[] = JSON.parse(storedFiches);
@@ -294,9 +348,8 @@ export default function FicheDetails() {
       description: "Vos changements ont été sauvegardés avec succès"
     });
   };
-  
+
   const handleDelete = () => {
-    // Supprimer la fiche de localStorage
     const storedFiches = localStorage.getItem('userFiches');
     if (storedFiches) {
       const fiches: Fiche[] = JSON.parse(storedFiches);
@@ -311,40 +364,14 @@ export default function FicheDetails() {
     });
     navigate('/');
   };
-  
+
   const handleExport = () => {
     toast({
       title: "Export en cours",
       description: "Votre fiche est en cours d'export au format PDF"
     });
   };
-  
-  // Mise à jour des valeurs des champs
-  const handleInputChangeForFiche = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    if (!fiche) return;
-    
-    const { name, value } = e.target;
-    
-    if (name.includes('.')) {
-      // Gérer les propriétés imbriquées (ex: logementsTypologies.t2)
-      const [parent, child] = name.split('.');
-      setFiche({
-        ...fiche,
-        [parent]: {
-          ...fiche[parent as keyof Fiche] as object,
-          [child]: value
-        }
-      });
-    } else {
-      // Gérer les propriétés simples
-      setFiche({
-        ...fiche,
-        [name]: value
-      });
-    }
-  };
-  
-  // Si la fiche n'existe pas
+
   if (loading) {
     return (
       <PageLayout>
@@ -354,7 +381,7 @@ export default function FicheDetails() {
       </PageLayout>
     );
   }
-  
+
   if (!fiche) {
     return (
       <PageLayout>
@@ -372,7 +399,6 @@ export default function FicheDetails() {
   return (
     <PageLayout>
       <div className="animate-enter opacity-0">
-        {/* Header avec bouton retour et info fiche */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <Link to="/" className="text-gray-500 hover:text-brand flex items-center gap-1 mb-3">
@@ -436,7 +462,6 @@ export default function FicheDetails() {
           </div>
         </div>
         
-        {/* Cercle de complétion mobile */}
         <div className="flex justify-center md:hidden mb-6">
           <Card className="p-4 flex items-center gap-4">
             <CompletionCircle percentage={fiche.completion} size={50} />
@@ -447,7 +472,6 @@ export default function FicheDetails() {
           </Card>
         </div>
         
-        {/* Tabs pour différentes sections */}
         <Tabs 
           defaultValue="cadastre" 
           value={activeTab} 
@@ -495,69 +519,168 @@ export default function FicheDetails() {
           
           <TabsContent value="plu" className="animate-enter opacity-0">
             <Card className="p-6">
-              <h3 className="text-lg font-medium mb-4">Données PLU</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Zone</label>
-                    <select 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                      name="zone"
-                      value={fiche.zone}
-                      onChange={handleInputChangeForFiche}
-                      disabled={!isEditing}
-                    >
-                      <option>UA</option>
-                      <option>UB</option>
-                      <option>UC</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Emprise au sol max</label>
-                    <div className="flex items-center">
-                      <input 
-                        type="number" 
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                        name="empriseAuSol"
-                        value={fiche.empriseAuSol}
-                        onChange={handleInputChangeForFiche}
-                        placeholder="70"
-                        readOnly={!isEditing}
-                      />
-                      <span className="ml-2">%</span>
+              <div className="border rounded-lg p-5 bg-white shadow-sm mb-6">
+                <h3 className="text-lg font-medium mb-4 text-brand border-b pb-2">Règles essentielles</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Zone</label>
+                      <Select
+                        value={fiche.zone}
+                        onValueChange={(value) => handleSelectChange('zone', value)}
+                        disabled={!isEditing}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Sélectionner une zone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="UA">UA</SelectItem>
+                          <SelectItem value="UB">UB</SelectItem>
+                          <SelectItem value="UC">UC</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Emprise au sol max</label>
+                      <div className="flex items-center">
+                        <Input 
+                          type="number" 
+                          name="empriseAuSol"
+                          value={fiche.empriseAuSol}
+                          onChange={handleInputChangeForFiche}
+                          placeholder="70"
+                          disabled={!isEditing}
+                        />
+                        <span className="ml-2">%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Hauteur maximale</label>
+                      <div className="flex items-center">
+                        <Input 
+                          type="number" 
+                          name="hauteurMax"
+                          value={fiche.hauteurMax}
+                          onChange={handleInputChangeForFiche}
+                          placeholder="14"
+                          disabled={!isEditing}
+                        />
+                        <span className="ml-2">m</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Espaces verts / pleine terre</label>
+                      <div className="flex items-center">
+                        <Input 
+                          type="number" 
+                          name="espacesVerts"
+                          value={fiche.espacesVerts}
+                          onChange={handleInputChangeForFiche}
+                          placeholder="20"
+                          disabled={!isEditing}
+                        />
+                        <span className="ml-2">%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Stationnement</label>
+                    <Input 
+                      type="text" 
+                      name="stationnement"
+                      value={fiche.stationnement}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="À définir selon la règle"
+                      disabled={!isEditing}
+                    />
                   </div>
                 </div>
-                <div className="space-y-4">
+              </div>
+              
+              <div className="border rounded-lg p-5 bg-gray-50 shadow-sm">
+                <h3 className="text-lg font-medium mb-4 text-brand border-b pb-2">Règles secondaires</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Hauteur maximale</label>
-                    <div className="flex items-center">
-                      <input 
-                        type="number" 
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                        name="hauteurMax"
-                        value={fiche.hauteurMax}
-                        onChange={handleInputChangeForFiche}
-                        placeholder="12"
-                        readOnly={!isEditing}
-                      />
-                      <span className="ml-2">m</span>
-                    </div>
+                    <label className="block text-sm font-medium mb-1">Profondeur de la bande de constructibilité principale</label>
+                    <Input 
+                      type="text" 
+                      name="bandePrincipale"
+                      value={fiche.bandePrincipale}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Ex: 15m"
+                      disabled={!isEditing}
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Espaces verts</label>
-                    <div className="flex items-center">
-                      <input 
-                        type="number" 
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                        name="espacesVerts"
-                        value={fiche.espacesVerts}
-                        onChange={handleInputChangeForFiche}
-                        placeholder="20"
-                        readOnly={!isEditing}
-                      />
-                      <span className="ml-2">%</span>
-                    </div>
+                    <label className="block text-sm font-medium mb-1">Profondeur de la bande de constructibilité secondaire</label>
+                    <Input 
+                      type="text" 
+                      name="bandeSecondaire"
+                      value={fiche.bandeSecondaire}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Ex: 25m"
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Implantation par rapport aux voies et aux emprises</label>
+                    <Input 
+                      type="text" 
+                      name="implantationVoies"
+                      value={fiche.implantationVoies}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Description de l'implantation..."
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Implantation par rapport aux limites séparatives</label>
+                    <Input 
+                      type="text" 
+                      name="implantationLimites"
+                      value={fiche.implantationLimites}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Description de l'implantation..."
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Retrait des limites séparatives</label>
+                    <Input 
+                      type="text" 
+                      name="retraitLimites"
+                      value={fiche.retraitLimites}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Ex: 3m minimum"
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Implantation des constructions sur un même terrain</label>
+                    <Input 
+                      type="text" 
+                      name="implantationTerrain"
+                      value={fiche.implantationTerrain}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Description de l'implantation..."
+                      disabled={!isEditing}
+                    />
+                  </div>
+                  
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">Respiration dans le volume bâti</label>
+                    <Input 
+                      type="text" 
+                      name="respirationBati"
+                      value={fiche.respirationBati}
+                      onChange={handleInputChangeForFiche}
+                      placeholder="Description des contraintes de respiration..."
+                      disabled={!isEditing}
+                    />
                   </div>
                 </div>
               </div>
@@ -603,40 +726,37 @@ export default function FicheDetails() {
                   <div>
                     <label className="block text-sm font-medium mb-1">Surface plancher</label>
                     <div className="flex items-center">
-                      <input 
+                      <Input 
                         type="number" 
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
                         name="surfacePlancher"
                         value={fiche.surfacePlancher}
                         onChange={handleInputChangeForFiche}
                         placeholder="1200"
-                        readOnly={!isEditing}
+                        disabled={!isEditing}
                       />
                       <span className="ml-2">m²</span>
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Nombre de logements</label>
-                    <input 
+                    <Input 
                       type="number" 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logements"
                       value={fiche.logements}
                       onChange={handleInputChangeForFiche}
                       placeholder="15"
-                      readOnly={!isEditing}
+                      disabled={!isEditing}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Dont logements sociaux</label>
-                    <input 
+                    <Input 
                       type="number" 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsSociaux"
                       value={fiche.logementsSociaux}
                       onChange={handleInputChangeForFiche}
                       placeholder="4"
-                      readOnly={!isEditing}
+                      disabled={!isEditing}
                     />
                   </div>
                 </div>
@@ -644,38 +764,35 @@ export default function FicheDetails() {
                   <h4 className="font-medium">Typologies</h4>
                   <div>
                     <label className="block text-sm font-medium mb-1">T2</label>
-                    <input 
+                    <Input 
                       type="number" 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t2"
                       value={fiche.logementsTypologies?.t2}
                       onChange={handleInputChangeForFiche}
                       placeholder="5"
-                      readOnly={!isEditing}
+                      disabled={!isEditing}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">T3</label>
-                    <input 
+                    <Input 
                       type="number" 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t3"
                       value={fiche.logementsTypologies?.t3}
                       onChange={handleInputChangeForFiche}
                       placeholder="7"
-                      readOnly={!isEditing}
+                      disabled={!isEditing}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">T4</label>
-                    <input 
+                    <Input 
                       type="number" 
-                      className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t4"
                       value={fiche.logementsTypologies?.t4}
                       onChange={handleInputChangeForFiche}
                       placeholder="3"
-                      readOnly={!isEditing}
+                      disabled={!isEditing}
                     />
                   </div>
                 </div>

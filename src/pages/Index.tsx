@@ -1,12 +1,16 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, BarChart2, FileText, Image, Map, PlusSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserFicheList } from '@/components/fiches/UserFicheList';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 const features = [
   {
@@ -54,13 +58,81 @@ const Index = () => {
   
   // State for showing/hiding features section
   const [showFeatures, setShowFeatures] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newFiche, setNewFiche] = useState({
+    address: '',
+    cadastreSection: '',
+    cadastreNumber: ''
+  });
   
   // Mock state for logged-in user (replace with actual authentication state)
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  
+  // Mise à jour des valeurs des champs
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewFiche(prev => ({ ...prev, [name]: value }));
+  };
   
   // Toggle the visibility of features
   const toggleFeatures = () => {
-    setShowFeatures(!showFeatures);
+    if (isLoggedIn) {
+      // Quand l'utilisateur est connecté, ouvrir le dialogue de création de fiche
+      setIsDialogOpen(true);
+    } else {
+      // Sinon, afficher la section des fonctionnalités
+      setShowFeatures(!showFeatures);
+    }
+  };
+  
+  // Gestion de la création d'une nouvelle fiche
+  const handleSubmitFiche = () => {
+    // Vérifier que tous les champs sont remplis
+    if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
+      toast({
+        title: "Champs incomplets",
+        description: "Veuillez remplir tous les champs",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Créer la nouvelle fiche
+    const newId = Date.now().toString();
+    const createdFiche = {
+      id: newId,
+      address: newFiche.address,
+      cadastreSection: newFiche.cadastreSection,
+      cadastreNumber: newFiche.cadastreNumber,
+      completion: 10, // valeur initiale
+      lastUpdated: new Date().toISOString().split('T')[0]
+    };
+    
+    // Récupérer les fiches existantes et ajouter la nouvelle
+    const storedFiches = localStorage.getItem('userFiches');
+    let fiches = storedFiches ? JSON.parse(storedFiches) : [];
+    fiches = [...fiches, createdFiche];
+    
+    // Sauvegarder dans localStorage (à remplacer par Supabase)
+    localStorage.setItem('userFiches', JSON.stringify(fiches));
+    
+    // Réinitialiser le formulaire et fermer la boîte de dialogue
+    setNewFiche({
+      address: '',
+      cadastreSection: '',
+      cadastreNumber: ''
+    });
+    setIsDialogOpen(false);
+    
+    toast({
+      title: "Fiche créée avec succès",
+      description: "La fiche a été ajoutée à votre liste",
+    });
+    
+    // Naviguer vers la nouvelle fiche
+    navigate(`/fiche/${newId}`);
   };
   
   // Simulate login check (replace with actual auth logic)
@@ -138,7 +210,7 @@ const Index = () => {
             Optimisez vos projets immobiliers grâce à notre plateforme intuitive d'analyse et de gestion
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            {/* New "Créer sa Fiche" button */}
+            {/* Bouton principal "Créer sa Fiche" */}
             <Button 
               size="lg" 
               className="bg-brand hover:bg-brand-dark flex items-center gap-2" 
@@ -165,6 +237,65 @@ const Index = () => {
         </div>
       </section>
       
+      {/* Dialogue pour créer une nouvelle fiche */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Créer une nouvelle fiche parcelle</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="address-new" className="text-right">
+                Adresse
+              </Label>
+              <Input
+                id="address-new"
+                name="address"
+                value={newFiche.address}
+                onChange={handleInputChange}
+                className="col-span-3"
+                placeholder="15 rue de la Paix, 75001 Paris"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cadastreSection-new" className="text-right">
+                Section
+              </Label>
+              <Input
+                id="cadastreSection-new"
+                name="cadastreSection"
+                value={newFiche.cadastreSection}
+                onChange={handleInputChange}
+                className="col-span-3"
+                placeholder="AB"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="cadastreNumber-new" className="text-right">
+                Numéro
+              </Label>
+              <Input
+                id="cadastreNumber-new"
+                name="cadastreNumber"
+                value={newFiche.cadastreNumber}
+                onChange={handleInputChange}
+                className="col-span-3"
+                placeholder="123"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              type="submit" 
+              className="bg-brand hover:bg-brand-dark" 
+              onClick={handleSubmitFiche}
+            >
+              Créer la fiche
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
       {/* User's Fiches Section - Only shown when user is logged in */}
       {isLoggedIn && (
         <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">
@@ -176,16 +307,6 @@ const Index = () => {
           </div>
           
           <UserFicheList />
-          
-          <div className="text-center mt-8">
-            <Button 
-              className="bg-brand hover:bg-brand-dark flex items-center gap-2"
-              onClick={toggleFeatures}
-            >
-              <PlusSquare className="h-5 w-5" />
-              Créer une nouvelle fiche
-            </Button>
-          </div>
         </section>
       )}
       

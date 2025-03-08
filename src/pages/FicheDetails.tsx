@@ -9,43 +9,88 @@ import { ArrowLeft, Edit2, Trash2, Save, Download } from 'lucide-react';
 import { CompletionCircle } from '@/components/fiches/CompletionCircle';
 import { useToast } from '@/hooks/use-toast';
 
-// Mock data - À remplacer par les données réelles de Supabase
-const mockFiches = [
-  {
-    id: '1',
-    address: '15 rue de la Paix, 75001 Paris',
-    cadastreSection: 'AB',
-    cadastreNumber: '123',
-    completion: 75,
-    lastUpdated: '2023-10-15'
-  },
-  {
-    id: '2',
-    address: '8 avenue des Champs-Élysées, 75008 Paris',
-    cadastreSection: 'CD',
-    cadastreNumber: '456',
-    completion: 30,
-    lastUpdated: '2023-10-12'
-  },
-  {
-    id: '3',
-    address: '25 boulevard Haussmann, 75009 Paris',
-    cadastreSection: 'EF',
-    cadastreNumber: '789',
-    completion: 100,
-    lastUpdated: '2023-10-10'
-  }
-];
+// Type definition for a fiche
+interface Fiche {
+  id: string;
+  address: string;
+  cadastreSection: string;
+  cadastreNumber: string;
+  completion: number;
+  lastUpdated: string;
+  zone?: string;
+  empriseAuSol?: number;
+  hauteurMax?: number;
+  espacesVerts?: number;
+  occupants?: Array<{ type: string; nombre: number; statut: string }>;
+  surfacePlancher?: number;
+  logements?: number;
+  logementsTypologies?: {
+    t2?: number;
+    t3?: number;
+    t4?: number;
+  };
+  logementsSociaux?: number;
+}
 
-const FicheDetails = () => {
+export default function FicheDetails() {
   const { ficheId } = useParams<{ ficheId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('images');
+  const [activeTab, setActiveTab] = useState('cadastre'); // Changer le tab par défaut
   const [isEditing, setIsEditing] = useState(false);
+  const [fiche, setFiche] = useState<Fiche | null>(null);
+  const [loading, setLoading] = useState(true);
   
-  // Dans une implémentation réelle, récupérer la fiche depuis Supabase
-  const fiche = mockFiches.find(f => f.id === ficheId);
+  // Charger la fiche depuis localStorage (au lieu de Supabase pour l'instant)
+  useEffect(() => {
+    const loadFiche = async () => {
+      setLoading(true);
+      try {
+        // Simuler un délai de chargement
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        const storedFiches = localStorage.getItem('userFiches');
+        if (storedFiches) {
+          const fiches: Fiche[] = JSON.parse(storedFiches);
+          const foundFiche = fiches.find(f => f.id === ficheId);
+          
+          if (foundFiche) {
+            // Ajouter des propriétés par défaut si elles n'existent pas
+            setFiche({
+              ...foundFiche,
+              zone: foundFiche.zone || 'UA',
+              empriseAuSol: foundFiche.empriseAuSol || 70,
+              hauteurMax: foundFiche.hauteurMax || 12,
+              espacesVerts: foundFiche.espacesVerts || 20,
+              occupants: foundFiche.occupants || [
+                { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
+                { type: 'Locataires', nombre: 3, statut: 'Famille' }
+              ],
+              surfacePlancher: foundFiche.surfacePlancher || 1200,
+              logements: foundFiche.logements || 15,
+              logementsSociaux: foundFiche.logementsSociaux || 4,
+              logementsTypologies: foundFiche.logementsTypologies || {
+                t2: 5,
+                t3: 7,
+                t4: 3
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement de la fiche:", error);
+        toast({
+          title: "Erreur de chargement",
+          description: "Impossible de charger les détails de la fiche",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadFiche();
+  }, [ficheId, toast]);
   
   // Gestion des actions utilisateur
   const handleEdit = () => {
@@ -57,6 +102,41 @@ const FicheDetails = () => {
   };
   
   const handleSave = () => {
+    if (!fiche) return;
+    
+    // Calculer le pourcentage de complétion
+    const fieldsToCheck = [
+      fiche.address, 
+      fiche.cadastreSection, 
+      fiche.cadastreNumber,
+      fiche.zone,
+      fiche.empriseAuSol,
+      fiche.hauteurMax,
+      fiche.espacesVerts,
+      fiche.surfacePlancher,
+      fiche.logements,
+      fiche.logementsSociaux
+    ];
+    
+    const nonEmptyFields = fieldsToCheck.filter(field => field !== undefined && field !== '').length;
+    const completionPercentage = Math.round((nonEmptyFields / fieldsToCheck.length) * 100);
+    
+    // Mettre à jour la fiche avec le nouveau pourcentage de complétion
+    const updatedFiche = {
+      ...fiche,
+      completion: completionPercentage,
+      lastUpdated: new Date().toISOString().split('T')[0]
+    };
+    
+    // Sauvegarder dans localStorage
+    const storedFiches = localStorage.getItem('userFiches');
+    if (storedFiches) {
+      const fiches: Fiche[] = JSON.parse(storedFiches);
+      const updatedFiches = fiches.map(f => f.id === ficheId ? updatedFiche : f);
+      localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+    }
+    
+    setFiche(updatedFiche);
     setIsEditing(false);
     toast({
       title: "Modifications enregistrées",
@@ -65,6 +145,14 @@ const FicheDetails = () => {
   };
   
   const handleDelete = () => {
+    // Supprimer la fiche de localStorage
+    const storedFiches = localStorage.getItem('userFiches');
+    if (storedFiches) {
+      const fiches: Fiche[] = JSON.parse(storedFiches);
+      const updatedFiches = fiches.filter(f => f.id !== ficheId);
+      localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+    }
+    
     toast({
       title: "Fiche supprimée",
       description: "Cette fiche a été supprimée définitivement",
@@ -80,7 +168,42 @@ const FicheDetails = () => {
     });
   };
   
+  // Mise à jour des valeurs des champs
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (!fiche) return;
+    
+    const { name, value } = e.target;
+    
+    if (name.includes('.')) {
+      // Gérer les propriétés imbriquées (ex: logementsTypologies.t2)
+      const [parent, child] = name.split('.');
+      setFiche({
+        ...fiche,
+        [parent]: {
+          ...fiche[parent as keyof Fiche] as object,
+          [child]: value
+        }
+      });
+    } else {
+      // Gérer les propriétés simples
+      setFiche({
+        ...fiche,
+        [name]: value
+      });
+    }
+  };
+  
   // Si la fiche n'existe pas
+  if (loading) {
+    return (
+      <PageLayout>
+        <div className="flex justify-center items-center min-h-[50vh]">
+          <div className="animate-pulse">Chargement en cours...</div>
+        </div>
+      </PageLayout>
+    );
+  }
+  
   if (!fiche) {
     return (
       <PageLayout>
@@ -175,7 +298,7 @@ const FicheDetails = () => {
         
         {/* Tabs pour différentes sections */}
         <Tabs 
-          defaultValue="images" 
+          defaultValue="cadastre" 
           value={activeTab} 
           onValueChange={setActiveTab} 
           className="mb-10"
@@ -208,7 +331,9 @@ const FicheDetails = () => {
                       <label className="block text-sm font-medium mb-1">Section</label>
                       <input 
                         type="text" 
+                        name="cadastreSection"
                         value={fiche.cadastreSection}
+                        onChange={handleInputChange}
                         readOnly={!isEditing}
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       />
@@ -217,7 +342,9 @@ const FicheDetails = () => {
                       <label className="block text-sm font-medium mb-1">Numéro</label>
                       <input 
                         type="text" 
+                        name="cadastreNumber"
                         value={fiche.cadastreNumber}
+                        onChange={handleInputChange}
                         readOnly={!isEditing}
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       />
@@ -231,7 +358,9 @@ const FicheDetails = () => {
                       <label className="block text-sm font-medium mb-1">Adresse complète</label>
                       <input 
                         type="text" 
+                        name="address"
                         value={fiche.address}
+                        onChange={handleInputChange}
                         readOnly={!isEditing}
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       />
@@ -251,6 +380,9 @@ const FicheDetails = () => {
                     <label className="block text-sm font-medium mb-1">Zone</label>
                     <select 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="zone"
+                      value={fiche.zone}
+                      onChange={handleInputChange}
                       disabled={!isEditing}
                     >
                       <option>UA</option>
@@ -264,6 +396,9 @@ const FicheDetails = () => {
                       <input 
                         type="number" 
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                        name="empriseAuSol"
+                        value={fiche.empriseAuSol}
+                        onChange={handleInputChange}
                         placeholder="70"
                         readOnly={!isEditing}
                       />
@@ -278,6 +413,9 @@ const FicheDetails = () => {
                       <input 
                         type="number" 
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                        name="hauteurMax"
+                        value={fiche.hauteurMax}
+                        onChange={handleInputChange}
                         placeholder="12"
                         readOnly={!isEditing}
                       />
@@ -290,6 +428,9 @@ const FicheDetails = () => {
                       <input 
                         type="number" 
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                        name="espacesVerts"
+                        value={fiche.espacesVerts}
+                        onChange={handleInputChange}
                         placeholder="20"
                         readOnly={!isEditing}
                       />
@@ -314,16 +455,13 @@ const FicheDetails = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    <tr>
-                      <td className="px-4 py-3">Propriétaire occupant</td>
-                      <td className="px-4 py-3">2</td>
-                      <td className="px-4 py-3">Retraités</td>
-                    </tr>
-                    <tr>
-                      <td className="px-4 py-3">Locataires</td>
-                      <td className="px-4 py-3">3</td>
-                      <td className="px-4 py-3">Famille</td>
-                    </tr>
+                    {fiche.occupants?.map((occupant, index) => (
+                      <tr key={index}>
+                        <td className="px-4 py-3">{occupant.type}</td>
+                        <td className="px-4 py-3">{occupant.nombre}</td>
+                        <td className="px-4 py-3">{occupant.statut}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -346,6 +484,9 @@ const FicheDetails = () => {
                       <input 
                         type="number" 
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                        name="surfacePlancher"
+                        value={fiche.surfacePlancher}
+                        onChange={handleInputChange}
                         placeholder="1200"
                         readOnly={!isEditing}
                       />
@@ -357,6 +498,9 @@ const FicheDetails = () => {
                     <input 
                       type="number" 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="logements"
+                      value={fiche.logements}
+                      onChange={handleInputChange}
                       placeholder="15"
                       readOnly={!isEditing}
                     />
@@ -366,6 +510,9 @@ const FicheDetails = () => {
                     <input 
                       type="number" 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="logementsSociaux"
+                      value={fiche.logementsSociaux}
+                      onChange={handleInputChange}
                       placeholder="4"
                       readOnly={!isEditing}
                     />
@@ -378,6 +525,9 @@ const FicheDetails = () => {
                     <input 
                       type="number" 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="logementsTypologies.t2"
+                      value={fiche.logementsTypologies?.t2}
+                      onChange={handleInputChange}
                       placeholder="5"
                       readOnly={!isEditing}
                     />
@@ -387,6 +537,9 @@ const FicheDetails = () => {
                     <input 
                       type="number" 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="logementsTypologies.t3"
+                      value={fiche.logementsTypologies?.t3}
+                      onChange={handleInputChange}
                       placeholder="7"
                       readOnly={!isEditing}
                     />
@@ -396,6 +549,9 @@ const FicheDetails = () => {
                     <input 
                       type="number" 
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
+                      name="logementsTypologies.t4"
+                      value={fiche.logementsTypologies?.t4}
+                      onChange={handleInputChange}
                       placeholder="3"
                       readOnly={!isEditing}
                     />
@@ -420,15 +576,18 @@ const FicheDetails = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
                   <div className="text-sm text-gray-500">Surface totale</div>
-                  <div className="text-xl font-semibold">970 m²</div>
+                  <div className="text-xl font-semibold">{fiche.surfacePlancher} m²</div>
                 </div>
                 <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
                   <div className="text-sm text-gray-500">Nombre de logements</div>
-                  <div className="text-xl font-semibold">15 logements</div>
+                  <div className="text-xl font-semibold">{fiche.logements} logements</div>
                 </div>
                 <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
                   <div className="text-sm text-gray-500">Dont sociaux</div>
-                  <div className="text-xl font-semibold">4 logements (27%)</div>
+                  <div className="text-xl font-semibold">
+                    {fiche.logementsSociaux} logements 
+                    ({fiche.logements && fiche.logementsSociaux ? Math.round((fiche.logementsSociaux / fiche.logements) * 100) : 0}%)
+                  </div>
                 </div>
               </div>
               
@@ -446,18 +605,30 @@ const FicheDetails = () => {
                     <tbody>
                       <tr>
                         <td className="px-4 py-2">T2</td>
-                        <td className="px-4 py-2">5</td>
-                        <td className="px-4 py-2">33%</td>
+                        <td className="px-4 py-2">{fiche.logementsTypologies?.t2}</td>
+                        <td className="px-4 py-2">
+                          {fiche.logements && fiche.logementsTypologies?.t2 
+                            ? Math.round((fiche.logementsTypologies.t2 / fiche.logements) * 100) 
+                            : 0}%
+                        </td>
                       </tr>
                       <tr>
                         <td className="px-4 py-2">T3</td>
-                        <td className="px-4 py-2">7</td>
-                        <td className="px-4 py-2">47%</td>
+                        <td className="px-4 py-2">{fiche.logementsTypologies?.t3}</td>
+                        <td className="px-4 py-2">
+                          {fiche.logements && fiche.logementsTypologies?.t3 
+                            ? Math.round((fiche.logementsTypologies.t3 / fiche.logements) * 100) 
+                            : 0}%
+                        </td>
                       </tr>
                       <tr>
                         <td className="px-4 py-2">T4</td>
-                        <td className="px-4 py-2">3</td>
-                        <td className="px-4 py-2">20%</td>
+                        <td className="px-4 py-2">{fiche.logementsTypologies?.t4}</td>
+                        <td className="px-4 py-2">
+                          {fiche.logements && fiche.logementsTypologies?.t4 
+                            ? Math.round((fiche.logementsTypologies.t4 / fiche.logements) * 100) 
+                            : 0}%
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -482,7 +653,7 @@ const FicheDetails = () => {
                       </tr>
                       <tr>
                         <td className="px-4 py-2">Hauteur</td>
-                        <td className="px-4 py-2">12m</td>
+                        <td className="px-4 py-2">{fiche.hauteurMax}m</td>
                         <td className="px-4 py-2">11m</td>
                         <td className="px-4 py-2 text-green-600">Conforme</td>
                       </tr>
@@ -502,6 +673,4 @@ const FicheDetails = () => {
       </div>
     </PageLayout>
   );
-};
-
-export default FicheDetails;
+}

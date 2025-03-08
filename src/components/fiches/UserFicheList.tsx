@@ -141,8 +141,13 @@ export function UserFicheList() {
       description: "La fiche a été ajoutée à votre liste",
     });
     
-    // Optionnel: naviguer vers la nouvelle fiche
-    // navigate(`/fiche/${newId}`);
+    // Naviguer vers la nouvelle fiche
+    navigate(`/fiche/${newId}`);
+  };
+  
+  // Fonction pour naviguer directement vers la fiche sélectionnée
+  const handleFicheClick = (id: string) => {
+    navigate(`/fiche/${id}`);
   };
   
   if (fiches.length === 0) {
@@ -219,7 +224,11 @@ export function UserFicheList() {
     <div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-4">
         {fiches.map((fiche) => (
-          <Card key={fiche.id} className="hover-scale border border-gray-100 shadow-soft overflow-hidden">
+          <Card 
+            key={fiche.id} 
+            className="hover-scale border border-gray-100 shadow-soft overflow-hidden cursor-pointer"
+            onClick={() => handleFicheClick(fiche.id)}
+          >
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <CardTitle className="text-xl">{fiche.address.split(',')[0]}</CardTitle>
@@ -242,13 +251,12 @@ export function UserFicheList() {
               </div>
             </CardContent>
             <CardFooter>
-              <Link 
-                to={`/fiche/${fiche.id}`} 
+              <div 
                 className="text-brand font-medium hover:underline group inline-flex items-center"
               >
                 Voir la fiche
                 <ArrowRight className="ml-1 h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
-              </Link>
+              </div>
             </CardFooter>
           </Card>
         ))}

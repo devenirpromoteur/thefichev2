@@ -1,13 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Minus, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useParams, useNavigate } from 'react-router-dom';
+import { CadastreTable } from '@/components/cadastre/CadastreTable';
+import { TableActions } from '@/components/cadastre/TableActions';
+import { TotalSurface } from '@/components/cadastre/TotalSurface';
 
 interface CadastreEntry {
   id: string;
@@ -171,99 +170,20 @@ const Cadastre = () => {
       <div className="animate-enter">
         <Card className="shadow-soft mt-4">
           <CardContent className="pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <div className="flex gap-2">
-                <Button 
-                  onClick={handleAddEntry}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
-                <Button 
-                  onClick={handleDeleteEntry}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  disabled={!selectedRow}
-                >
-                  <Minus className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="flex items-center text-sm text-muted-foreground">
-                <Info className="h-4 w-4 mr-1" />
-                <span>Sélectionnez une ligne pour la supprimer</span>
-              </div>
-            </div>
+            <TableActions 
+              onAddEntry={handleAddEntry}
+              onDeleteEntry={handleDeleteEntry}
+              isDeleteDisabled={!selectedRow}
+            />
             
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Section et Parcelle</TableHead>
-                    <TableHead>Adresse</TableHead>
-                    <TableHead className="w-[160px]">Surface (m²)</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center py-8 text-gray-500">
-                        Aucune parcelle enregistrée
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    entries.map(entry => (
-                      <TableRow 
-                        key={entry.id}
-                        className={selectedRow === entry.id ? "bg-muted" : ""}
-                        onClick={() => setSelectedRow(entry.id)}
-                      >
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Input
-                              value={entry.section}
-                              onChange={(e) => handleInputChange(entry.id, 'section', e.target.value)}
-                              placeholder="Section"
-                              className="max-w-[100px]"
-                            />
-                            <Input
-                              value={entry.parcelle}
-                              onChange={(e) => handleInputChange(entry.id, 'parcelle', e.target.value)}
-                              placeholder="Parcelle"
-                            />
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={entry.adresse}
-                            onChange={(e) => handleInputChange(entry.id, 'adresse', e.target.value)}
-                            placeholder="ex: 10 rue Example"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={entry.surface}
-                            onChange={(e) => handleInputChange(entry.id, 'surface', e.target.value)}
-                            placeholder="ex: 450"
-                            type="number"
-                            min="0"
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+            <CadastreTable 
+              entries={entries}
+              selectedRow={selectedRow}
+              onSelectRow={setSelectedRow}
+              onInputChange={handleInputChange}
+            />
             
-            <div className="mt-6 p-4 border border-gray-200 rounded-md bg-gray-50">
-              <div className="flex justify-between items-center">
-                <span className="font-medium">Surface totale</span>
-                <span className="text-xl font-bold">{getTotalSurface()} m²</span>
-              </div>
-            </div>
+            <TotalSurface totalSurface={getTotalSurface()} />
           </CardContent>
         </Card>
       </div>

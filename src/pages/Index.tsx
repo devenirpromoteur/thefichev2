@@ -1,11 +1,12 @@
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart2, FileText, Image, Map, Users } from 'lucide-react';
+import { ArrowRight, BarChart2, FileText, Image, Map, PlusSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { UserFicheList } from '@/components/fiches/UserFicheList';
 
 const features = [
   {
@@ -51,6 +52,39 @@ const Index = () => {
   const heroRef = useRef<HTMLDivElement>(null);
   const featureRefs = useRef<(HTMLDivElement | null)[]>([]);
   
+  // State for showing/hiding features section
+  const [showFeatures, setShowFeatures] = useState(false);
+  
+  // Mock state for logged-in user (replace with actual authentication state)
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  
+  // Toggle the visibility of features
+  const toggleFeatures = () => {
+    setShowFeatures(!showFeatures);
+  };
+  
+  // Simulate login check (replace with actual auth logic)
+  useEffect(() => {
+    // Mock login check - replace with actual auth check
+    const checkLoginStatus = () => {
+      const mockLoggedIn = localStorage.getItem('mockUserLoggedIn') === 'true';
+      setIsLoggedIn(mockLoggedIn);
+    };
+    
+    checkLoginStatus();
+    
+    // For demo purposes only - to toggle mock login state
+    // Remove this in production and replace with actual auth
+    const loginToggleBtn = document.getElementById('mock-login-toggle');
+    if (loginToggleBtn) {
+      loginToggleBtn.addEventListener('click', () => {
+        const currentState = localStorage.getItem('mockUserLoggedIn') === 'true';
+        localStorage.setItem('mockUserLoggedIn', (!currentState).toString());
+        setIsLoggedIn(!currentState);
+      });
+    }
+  }, []);
+  
   // Intersection Observer for animations
   useEffect(() => {
     const observerOptions = {
@@ -72,9 +106,11 @@ const Index = () => {
       observer.observe(heroRef.current);
     }
     
-    featureRefs.current.forEach(ref => {
-      if (ref) observer.observe(ref);
-    });
+    if (showFeatures) {
+      featureRefs.current.forEach(ref => {
+        if (ref) observer.observe(ref);
+      });
+    }
     
     return () => {
       if (heroRef.current) {
@@ -85,7 +121,7 @@ const Index = () => {
         if (ref) observer.unobserve(ref);
       });
     };
-  }, []);
+  }, [showFeatures]);
   
   return (
     <PageLayout>
@@ -102,58 +138,96 @@ const Index = () => {
             Optimisez vos projets immobiliers grâce à notre plateforme intuitive d'analyse et de gestion
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/register">
-              <Button size="lg" className="bg-brand hover:bg-brand-dark">
-                Commencer gratuitement
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/demo">
-              <Button variant="outline" size="lg">
-                Voir la démo
-              </Button>
-            </Link>
+            {/* New "Créer sa Fiche" button */}
+            <Button 
+              size="lg" 
+              className="bg-brand hover:bg-brand-dark flex items-center gap-2" 
+              onClick={toggleFeatures}
+            >
+              <PlusSquare className="h-5 w-5" />
+              Créer sa Fiche
+            </Button>
+            
+            {!isLoggedIn && (
+              <Link to="/register">
+                <Button variant="outline" size="lg">
+                  Commencer gratuitement
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            )}
+            
+            {/* For demo only - remove in production */}
+            <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
+              {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
+            </Button>
           </div>
         </div>
       </section>
       
-      {/* Features Grid */}
-      <section className="py-20 bg-gray-50 rounded-3xl">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold mb-4">Modules intégrés</h2>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Notre application réunit tous les outils nécessaires pour analyser la faisabilité de vos projets immobiliers
-          </p>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
-            <div 
-              key={feature.title}
-              ref={el => featureRefs.current[index] = el}
-              className={cn("opacity-0", index % 3 === 0 ? "animate-enter-delay-1" : index % 3 === 1 ? "animate-enter-delay-2" : "animate-enter-delay-3")}
+      {/* User's Fiches Section - Only shown when user is logged in */}
+      {isLoggedIn && (
+        <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold mb-4">Mes Fiches Parcelles</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Retrouvez ici toutes vos fiches de projets immobiliers
+            </p>
+          </div>
+          
+          <UserFicheList />
+          
+          <div className="text-center mt-8">
+            <Button 
+              className="bg-brand hover:bg-brand-dark flex items-center gap-2"
+              onClick={toggleFeatures}
             >
-              <Card className="hover-scale h-full border border-gray-100 shadow-soft overflow-hidden">
-                <CardHeader className="pb-2">
-                  <div className="w-12 h-12 rounded-lg bg-brand/10 flex items-center justify-center mb-4">
-                    <feature.icon className="h-6 w-6 text-brand" />
-                  </div>
-                  <CardTitle>{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">{feature.description}</p>
-                </CardContent>
-                <CardFooter>
-                  <Link to={feature.path} className="text-brand font-medium hover:underline group inline-flex items-center">
-                    Explorer
-                    <ArrowRight className="ml-1 h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </CardFooter>
-              </Card>
-            </div>
-          ))}
-        </div>
-      </section>
+              <PlusSquare className="h-5 w-5" />
+              Créer une nouvelle fiche
+            </Button>
+          </div>
+        </section>
+      )}
+      
+      {/* Features Grid - Only shown when showFeatures is true */}
+      {showFeatures && (
+        <section className="py-20 bg-gray-50 rounded-3xl">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl font-bold mb-4">Modules intégrés</h2>
+            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
+              Notre application réunit tous les outils nécessaires pour analyser la faisabilité de vos projets immobiliers
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <div 
+                key={feature.title}
+                ref={el => featureRefs.current[index] = el}
+                className={cn("opacity-0", index % 3 === 0 ? "animate-enter-delay-1" : index % 3 === 1 ? "animate-enter-delay-2" : "animate-enter-delay-3")}
+              >
+                <Card className="hover-scale h-full border border-gray-100 shadow-soft overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <div className="w-12 h-12 rounded-lg bg-brand/10 flex items-center justify-center mb-4">
+                      <feature.icon className="h-6 w-6 text-brand" />
+                    </div>
+                    <CardTitle>{feature.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-600">{feature.description}</p>
+                  </CardContent>
+                  <CardFooter>
+                    <Link to={feature.path} className="text-brand font-medium hover:underline group inline-flex items-center">
+                      Explorer
+                      <ArrowRight className="ml-1 h-4 w-4 transform group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                  </CardFooter>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       
       {/* CTA Section */}
       <section className="py-20">

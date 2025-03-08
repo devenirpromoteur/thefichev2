@@ -14,6 +14,7 @@ import Projet from "./pages/Projet";
 import Synthese from "./pages/Synthese";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import FicheDetails from "./pages/FicheDetails";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/synthese" element={<Synthese />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/fiche/:ficheId" element={<FicheDetails />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -5,19 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+// Les items du menu principal sont masqués par défaut
+// Ils s'afficheront dans la vue détaillée de la fiche
 const navItems = [
   { name: 'Accueil', path: '/' },
-  { name: 'Images', path: '/images' },
-  { name: 'Cadastre', path: '/cadastre' },
-  { name: 'PLU', path: '/plu' },
-  { name: 'Résidents', path: '/residents' },
-  { name: 'Projet', path: '/projet' },
-  { name: 'Synthèse', path: '/synthese' },
 ];
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -31,7 +28,23 @@ export function Header() {
     };
   }, []);
 
-  // Close mobile menu when location changes
+  // Vérifier si l'utilisateur est connecté
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      const mockLoggedIn = localStorage.getItem('mockUserLoggedIn') === 'true';
+      setIsLoggedIn(mockLoggedIn);
+    };
+    
+    checkLoginStatus();
+    
+    // Pour la démo uniquement - à remplacer par l'authentification réelle Supabase
+    window.addEventListener('storage', checkLoginStatus);
+    return () => {
+      window.removeEventListener('storage', checkLoginStatus);
+    };
+  }, []);
+
+  // Fermer le menu mobile lorsque la route change
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location]);
@@ -67,18 +80,21 @@ export function Header() {
           ))}
         </nav>
         
-        <div className="hidden md:flex items-center space-x-4">
-          <Link to="/login">
-            <Button variant="outline" size="sm" className="font-medium">
-              Connexion
-            </Button>
-          </Link>
-          <Link to="/register">
-            <Button size="sm" className="font-medium bg-brand hover:bg-brand-dark">
-              Inscription
-            </Button>
-          </Link>
-        </div>
+        {/* Boutons d'authentification - masqués si l'utilisateur est connecté */}
+        {!isLoggedIn && (
+          <div className="hidden md:flex items-center space-x-4">
+            <Link to="/login">
+              <Button variant="outline" size="sm" className="font-medium">
+                Connexion
+              </Button>
+            </Link>
+            <Link to="/register">
+              <Button size="sm" className="font-medium bg-brand hover:bg-brand-dark">
+                Inscription
+              </Button>
+            </Link>
+          </div>
+        )}
         
         {/* Mobile menu button */}
         <button 
@@ -107,18 +123,22 @@ export function Header() {
                 {item.name}
               </Link>
             ))}
-            <div className="pt-4 flex flex-col space-y-2">
-              <Link to="/login">
-                <Button variant="outline" className="w-full justify-center font-medium">
-                  Connexion
-                </Button>
-              </Link>
-              <Link to="/register">
-                <Button className="w-full justify-center font-medium bg-brand hover:bg-brand-dark">
-                  Inscription
-                </Button>
-              </Link>
-            </div>
+            
+            {/* Boutons d'authentification mobile - masqués si l'utilisateur est connecté */}
+            {!isLoggedIn && (
+              <div className="pt-4 flex flex-col space-y-2">
+                <Link to="/login">
+                  <Button variant="outline" className="w-full justify-center font-medium">
+                    Connexion
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button className="w-full justify-center font-medium bg-brand hover:bg-brand-dark">
+                    Inscription
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}

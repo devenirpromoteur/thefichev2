@@ -16,7 +16,15 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import FicheDetails from "./pages/FicheDetails";
 
-const queryClient = new QueryClient();
+// Création du client de requête pour React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -35,7 +43,7 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/fiche/:ficheId" element={<FicheDetails />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          {/* Toutes les routes personnalisées doivent être ajoutées au-dessus de la route catch-all "*" */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

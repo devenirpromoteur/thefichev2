@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -8,6 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Edit2, Trash2, Save, Download } from 'lucide-react';
 import { CompletionCircle } from '@/components/fiches/CompletionCircle';
 import { useToast } from '@/hooks/use-toast';
+import { CadastreTable } from '@/components/cadastre/CadastreTable';
+import { TableActions } from '@/components/cadastre/TableActions';
+import { TotalSurface } from '@/components/cadastre/TotalSurface';
 
 // Type definition for a fiche
 interface Fiche {
@@ -32,6 +34,15 @@ interface Fiche {
   logementsSociaux?: number;
 }
 
+// Type pour les entrées du cadastre
+interface CadastreEntry {
+  id: string;
+  parcelle: string;
+  adresse: string;
+  section: string;
+  surface: string;
+}
+
 export default function FicheDetails() {
   const { ficheId } = useParams<{ ficheId: string }>();
   const navigate = useNavigate();
@@ -40,6 +51,10 @@ export default function FicheDetails() {
   const [isEditing, setIsEditing] = useState(false);
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Ajout des states pour le module Cadastre
+  const [entries, setEntries] = useState<CadastreEntry[]>([]);
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
   // Charger la fiche depuis localStorage (au lieu de Supabase pour l'instant)
   useEffect(() => {
@@ -75,6 +90,17 @@ export default function FicheDetails() {
                 t4: 3
               }
             });
+            
+            // Récupérer les entrées cadastrales existantes ou initialiser
+            const fiches2 = JSON.parse(storedFiches);
+            const currentFiche = fiches2.find((f: any) => f.id === ficheId);
+            
+            if (currentFiche && currentFiche.cadastreEntries) {
+              setEntries(currentFiche.cadastreEntries);
+            } else {
+              // Initialiser avec une entrée basée sur les données de la fiche
+              handleAddEntry();
+            }
           }
         }
       } catch (error) {
@@ -91,6 +117,130 @@ export default function FicheDetails() {
     
     loadFiche();
   }, [ficheId, toast]);
+  
+  // Fonction pour ajouter une entrée de cadastre
+  const handleAddEntry = () => {
+    const newEntry: CadastreEntry = {
+      id: Math.random().toString(36).substring(2, 9),
+      parcelle: fiche?.cadastreNumber || '',
+      adresse: fiche?.address || '',
+      section: fiche?.cadastreSection || '',
+      surface: '',
+    };
+    
+    setEntries(prev => [...prev, newEntry]);
+  };
+
+  // Fonction pour supprimer une entrée de cadastre
+  const handleDeleteEntry = () => {
+    if (!selectedRow) {
+      toast({
+        title: "Aucune ligne sélectionnée",
+        description: "Veuillez sélectionner une ligne à supprimer",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setEntries(prev => prev.filter(entry => entry.id !== selectedRow));
+    setSelectedRow(null);
+    
+    toast({
+      title: "Ligne supprimée",
+      description: "La ligne a été supprimée avec succès",
+    });
+  };
+
+  // Fonction pour gérer les changements dans les champs du cadastre
+  const handleInputChange = (id: string, field: keyof Omit<CadastreEntry, 'id'>, value: string) => {
+    setEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  // Sauvegarde automatique des entrées cadastrales
+  useEffect(() => {
+    if (ficheId && entries.length > 0) {
+      saveToLocalStorage();
+    }
+  }, [entries]);
+
+  // Fonction pour calculer la surface totale
+  const getTotalSurface = () => {
+    return entries.reduce((total, entry) => {
+      const surface = parseFloat(entry.surface) || 0;
+      return total + surface;
+    }, 0);
+  };
+
+  // Fonction pour sauvegarder les données dans localStorage
+  const saveToLocalStorage = () => {
+    const storedFiches = localStorage.getItem('userFiches');
+    if (storedFiches && ficheId) {
+      const fiches = JSON.parse(storedFiches);
+      const updatedFiches = fiches.map((fiche: any) => {
+        if (fiche.id === ficheId) {
+          // Calculer la complétion pour la section cadastre
+          const filledFields = entries.reduce((count, entry) => {
+            let fieldCount = 0;
+            if (entry.section) fieldCount++;
+            if (entry.parcelle) fieldCount++;
+            if (entry.adresse) fieldCount++;
+            if (entry.surface) fieldCount++;
+            return count + fieldCount;
+          }, 0);
+          
+          const totalPossibleFields = entries.length * 4;
+          const cadastreCompletion = totalPossibleFields > 0 
+            ? Math.round((filledFields / totalPossibleFields) * 100) 
+            : 0;
+          
+          return {
+            ...fiche,
+            cadastreEntries: entries,
+            cadastreCompletion: cadastreCompletion,
+            // Mise à jour de la complétion globale
+            completion: calculateOverallCompletion(fiche, cadastreCompletion)
+          };
+        }
+        return fiche;
+      });
+      
+      localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+      
+      toast({
+        title: "Données sauvegardées",
+        description: "Les informations cadastrales ont été mises à jour",
+        duration: 2000,
+      });
+    }
+  };
+
+  // Fonction pour calculer la complétion globale
+  const calculateOverallCompletion = (fiche: any, cadastreCompletion: number) => {
+    // Définir les poids pour chaque section
+    const weights = {
+      cadastre: 0.2,
+      plu: 0.2,
+      residents: 0.2,
+      projet: 0.4
+    };
+    
+    // Obtenir les valeurs de complétion pour chaque section
+    const completions = {
+      cadastre: cadastreCompletion,
+      plu: fiche.pluCompletion || 0,
+      residents: fiche.residentsCompletion || 0,
+      projet: fiche.projetCompletion || 0
+    };
+    
+    // Calculer la moyenne pondérée
+    const weightedSum = Object.keys(weights).reduce((sum, section) => {
+      return sum + (completions[section as keyof typeof completions] * weights[section as keyof typeof weights]);
+    }, 0);
+    
+    return Math.round(weightedSum);
+  };
   
   // Gestion des actions utilisateur
   const handleEdit = () => {
@@ -169,7 +319,7 @@ export default function FicheDetails() {
   };
   
   // Mise à jour des valeurs des champs
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChangeForFiche = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (!fiche) return;
     
     const { name, value } = e.target;
@@ -322,52 +472,23 @@ export default function FicheDetails() {
           </TabsContent>
           
           <TabsContent value="cadastre" className="animate-enter opacity-0">
-            <Card className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Informations cadastrales</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Section</label>
-                      <input 
-                        type="text" 
-                        name="cadastreSection"
-                        value={fiche.cadastreSection}
-                        onChange={handleInputChange}
-                        readOnly={!isEditing}
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Numéro</label>
-                      <input 
-                        type="text" 
-                        name="cadastreNumber"
-                        value={fiche.cadastreNumber}
-                        onChange={handleInputChange}
-                        readOnly={!isEditing}
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-medium mb-4">Adresse</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Adresse complète</label>
-                      <input 
-                        type="text" 
-                        name="address"
-                        value={fiche.address}
-                        onChange={handleInputChange}
-                        readOnly={!isEditing}
-                        className="border border-gray-300 rounded-md px-3 py-2 w-full"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <Card className="shadow-soft mt-4">
+              <CardContent className="pt-6">
+                <TableActions 
+                  onAddEntry={handleAddEntry}
+                  onDeleteEntry={handleDeleteEntry}
+                  isDeleteDisabled={!selectedRow}
+                />
+                
+                <CadastreTable 
+                  entries={entries}
+                  selectedRow={selectedRow}
+                  onSelectRow={setSelectedRow}
+                  onInputChange={handleInputChange}
+                />
+                
+                <TotalSurface totalSurface={getTotalSurface()} />
+              </CardContent>
             </Card>
           </TabsContent>
           
@@ -382,7 +503,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="zone"
                       value={fiche.zone}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       disabled={!isEditing}
                     >
                       <option>UA</option>
@@ -398,7 +519,7 @@ export default function FicheDetails() {
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                         name="empriseAuSol"
                         value={fiche.empriseAuSol}
-                        onChange={handleInputChange}
+                        onChange={handleInputChangeForFiche}
                         placeholder="70"
                         readOnly={!isEditing}
                       />
@@ -415,7 +536,7 @@ export default function FicheDetails() {
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                         name="hauteurMax"
                         value={fiche.hauteurMax}
-                        onChange={handleInputChange}
+                        onChange={handleInputChangeForFiche}
                         placeholder="12"
                         readOnly={!isEditing}
                       />
@@ -430,7 +551,7 @@ export default function FicheDetails() {
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                         name="espacesVerts"
                         value={fiche.espacesVerts}
-                        onChange={handleInputChange}
+                        onChange={handleInputChangeForFiche}
                         placeholder="20"
                         readOnly={!isEditing}
                       />
@@ -486,7 +607,7 @@ export default function FicheDetails() {
                         className="border border-gray-300 rounded-md px-3 py-2 w-full"
                         name="surfacePlancher"
                         value={fiche.surfacePlancher}
-                        onChange={handleInputChange}
+                        onChange={handleInputChangeForFiche}
                         placeholder="1200"
                         readOnly={!isEditing}
                       />
@@ -500,7 +621,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logements"
                       value={fiche.logements}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       placeholder="15"
                       readOnly={!isEditing}
                     />
@@ -512,7 +633,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsSociaux"
                       value={fiche.logementsSociaux}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       placeholder="4"
                       readOnly={!isEditing}
                     />
@@ -527,7 +648,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t2"
                       value={fiche.logementsTypologies?.t2}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       placeholder="5"
                       readOnly={!isEditing}
                     />
@@ -539,7 +660,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t3"
                       value={fiche.logementsTypologies?.t3}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       placeholder="7"
                       readOnly={!isEditing}
                     />
@@ -551,7 +672,7 @@ export default function FicheDetails() {
                       className="border border-gray-300 rounded-md px-3 py-2 w-full"
                       name="logementsTypologies.t4"
                       value={fiche.logementsTypologies?.t4}
-                      onChange={handleInputChange}
+                      onChange={handleInputChangeForFiche}
                       placeholder="3"
                       readOnly={!isEditing}
                     />

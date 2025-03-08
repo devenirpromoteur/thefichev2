@@ -1,11 +1,13 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Edit, Save, X } from 'lucide-react';
+import { Plus, Minus, Info } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useParams, useNavigate } from 'react-router-dom';
 
 interface CadastreEntry {
   id: string;
@@ -17,235 +19,253 @@ interface CadastreEntry {
 
 const Cadastre = () => {
   const [entries, setEntries] = useState<CadastreEntry[]>([]);
-  const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [newEntry, setNewEntry] = useState<Omit<CadastreEntry, 'id'>>({
-    parcelle: '',
-    adresse: '',
-    section: '',
-    surface: '',
-  });
-  const [editedEntry, setEditedEntry] = useState<CadastreEntry | null>(null);
+  const [selectedRow, setSelectedRow] = useState<string | null>(null);
+  const { toast } = useToast();
+  const { ficheId } = useParams();
+  const navigate = useNavigate();
 
-  const handleAddEntry = () => {
-    if (!newEntry.parcelle.trim()) return;
-    
-    const entry: CadastreEntry = {
-      id: Math.random().toString(36).substring(2, 9),
-      ...newEntry
+  // Load existing data for this fiche
+  useEffect(() => {
+    if (ficheId) {
+      const storedFiches = localStorage.getItem('userFiches');
+      if (storedFiches) {
+        const fiches = JSON.parse(storedFiches);
+        const currentFiche = fiches.find((fiche: any) => fiche.id === ficheId);
+        
+        if (currentFiche && currentFiche.cadastreEntries) {
+          setEntries(currentFiche.cadastreEntries);
+        } else {
+          // Initialize with one empty row if no data exists
+          handleAddEntry();
+        }
+      } else {
+        // Initialize with one empty row if no data exists
+        handleAddEntry();
+      }
+    } else {
+      // Initialize with one empty row if no ficheId (shouldn't happen)
+      handleAddEntry();
+    }
+  }, [ficheId]);
+
+  // Save data whenever entries change
+  useEffect(() => {
+    if (ficheId && entries.length > 0) {
+      saveToLocalStorage();
+    }
+  }, [entries]);
+
+  const saveToLocalStorage = () => {
+    const storedFiches = localStorage.getItem('userFiches');
+    if (storedFiches && ficheId) {
+      const fiches = JSON.parse(storedFiches);
+      const updatedFiches = fiches.map((fiche: any) => {
+        if (fiche.id === ficheId) {
+          // Calculate completion for the cadastre section
+          const filledFields = entries.reduce((count, entry) => {
+            let fieldCount = 0;
+            if (entry.section) fieldCount++;
+            if (entry.parcelle) fieldCount++;
+            if (entry.adresse) fieldCount++;
+            if (entry.surface) fieldCount++;
+            return count + fieldCount;
+          }, 0);
+          
+          const totalPossibleFields = entries.length * 4;
+          const cadastreCompletion = totalPossibleFields > 0 
+            ? Math.round((filledFields / totalPossibleFields) * 100) 
+            : 0;
+          
+          return {
+            ...fiche,
+            cadastreEntries: entries,
+            cadastreCompletion: cadastreCompletion,
+            // Update the overall completion based on all sections
+            completion: calculateOverallCompletion(fiche, cadastreCompletion)
+          };
+        }
+        return fiche;
+      });
+      
+      localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+      
+      toast({
+        title: "Données sauvegardées",
+        description: "Les informations cadastrales ont été mises à jour",
+        duration: 2000,
+      });
+    }
+  };
+
+  const calculateOverallCompletion = (fiche: any, cadastreCompletion: number) => {
+    // Define weights for each section
+    const weights = {
+      cadastre: 0.2,
+      plu: 0.2,
+      residents: 0.2,
+      projet: 0.4
     };
     
-    setEntries(prev => [...prev, entry]);
-    setNewEntry({ parcelle: '', adresse: '', section: '', surface: '' });
-  };
-
-  const handleDeleteEntry = (id: string) => {
-    setEntries(prev => prev.filter(entry => entry.id !== id));
-  };
-
-  const handleEditEntry = (entry: CadastreEntry) => {
-    setIsEditing(entry.id);
-    setEditedEntry(entry);
-  };
-
-  const handleSaveEdit = () => {
-    if (!editedEntry) return;
+    // Get completions for each section or use 0 if not available
+    const completions = {
+      cadastre: cadastreCompletion,
+      plu: fiche.pluCompletion || 0,
+      residents: fiche.residentsCompletion || 0,
+      projet: fiche.projetCompletion || 0
+    };
     
-    setEntries(prev => prev.map(entry => 
-      entry.id === editedEntry.id ? editedEntry : entry
-    ));
+    // Calculate weighted average
+    const weightedSum = Object.keys(weights).reduce((sum, section) => {
+      return sum + (completions[section as keyof typeof completions] * weights[section as keyof typeof weights]);
+    }, 0);
     
-    setIsEditing(null);
-    setEditedEntry(null);
+    return Math.round(weightedSum);
   };
 
-  const handleCancelEdit = () => {
-    setIsEditing(null);
-    setEditedEntry(null);
+  const handleAddEntry = () => {
+    const newEntry: CadastreEntry = {
+      id: Math.random().toString(36).substring(2, 9),
+      parcelle: '',
+      adresse: '',
+      section: '',
+      surface: '',
+    };
+    
+    setEntries(prev => [...prev, newEntry]);
   };
 
-  const handleEditChange = (field: keyof Omit<CadastreEntry, 'id'>, value: string) => {
-    if (!editedEntry) return;
+  const handleDeleteEntry = () => {
+    if (!selectedRow) {
+      toast({
+        title: "Aucune ligne sélectionnée",
+        description: "Veuillez sélectionner une ligne à supprimer",
+        variant: "destructive",
+      });
+      return;
+    }
     
-    setEditedEntry({
-      ...editedEntry,
-      [field]: value
+    setEntries(prev => prev.filter(entry => entry.id !== selectedRow));
+    setSelectedRow(null);
+    
+    toast({
+      title: "Ligne supprimée",
+      description: "La ligne a été supprimée avec succès",
     });
+  };
+
+  const handleInputChange = (id: string, field: keyof Omit<CadastreEntry, 'id'>, value: string) => {
+    setEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const getTotalSurface = () => {
+    return entries.reduce((total, entry) => {
+      const surface = parseFloat(entry.surface) || 0;
+      return total + surface;
+    }, 0);
   };
 
   return (
     <PageLayout>
       <div className="animate-enter">
-        <h1 className="text-4xl font-bold mb-2">Données cadastrales</h1>
-        <p className="text-lg text-gray-600 mb-8">
-          Enregistrez et gérez les informations cadastrales de votre projet
-        </p>
-
-        <div className="grid grid-cols-1 gap-8">
-          <Card className="shadow-soft">
-            <CardHeader>
-              <CardTitle>Ajouter une nouvelle parcelle</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                <div>
-                  <label className="text-sm font-medium mb-1 block text-gray-700">Numéro de parcelle</label>
-                  <Input
-                    value={newEntry.parcelle}
-                    onChange={(e) => setNewEntry({ ...newEntry, parcelle: e.target.value })}
-                    placeholder="ex: AB-123"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block text-gray-700">Adresse</label>
-                  <Input
-                    value={newEntry.adresse}
-                    onChange={(e) => setNewEntry({ ...newEntry, adresse: e.target.value })}
-                    placeholder="ex: 10 rue Example"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block text-gray-700">Section cadastrale</label>
-                  <Input
-                    value={newEntry.section}
-                    onChange={(e) => setNewEntry({ ...newEntry, section: e.target.value })}
-                    placeholder="ex: Section B"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block text-gray-700">Surface (m²)</label>
-                  <Input
-                    value={newEntry.surface}
-                    onChange={(e) => setNewEntry({ ...newEntry, surface: e.target.value })}
-                    placeholder="ex: 450"
-                  />
-                </div>
+        <Card className="shadow-soft mt-4">
+          <CardContent className="pt-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleAddEntry}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button 
+                  onClick={handleDeleteEntry}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  disabled={!selectedRow}
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
               </div>
-              <Button 
-                onClick={handleAddEntry}
-                className="mt-2 bg-brand hover:bg-brand-dark"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Ajouter
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-soft">
-            <CardHeader>
-              <CardTitle>Parcelles enregistrées</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
+              <div className="flex items-center text-sm text-muted-foreground">
+                <Info className="h-4 w-4 mr-1" />
+                <span>Sélectionnez une ligne pour la supprimer</span>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Section et Parcelle</TableHead>
+                    <TableHead>Adresse</TableHead>
+                    <TableHead className="w-[160px]">Surface (m²)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {entries.length === 0 ? (
                     <TableRow>
-                      <TableHead>Numéro de parcelle</TableHead>
-                      <TableHead>Adresse</TableHead>
-                      <TableHead>Section cadastrale</TableHead>
-                      <TableHead>Surface (m²)</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
+                      <TableCell colSpan={3} className="text-center py-8 text-gray-500">
+                        Aucune parcelle enregistrée
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {entries.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                          Aucune parcelle enregistrée
+                  ) : (
+                    entries.map(entry => (
+                      <TableRow 
+                        key={entry.id}
+                        className={selectedRow === entry.id ? "bg-muted" : ""}
+                        onClick={() => setSelectedRow(entry.id)}
+                      >
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Input
+                              value={entry.section}
+                              onChange={(e) => handleInputChange(entry.id, 'section', e.target.value)}
+                              placeholder="Section"
+                              className="max-w-[100px]"
+                            />
+                            <Input
+                              value={entry.parcelle}
+                              onChange={(e) => handleInputChange(entry.id, 'parcelle', e.target.value)}
+                              placeholder="Parcelle"
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={entry.adresse}
+                            onChange={(e) => handleInputChange(entry.id, 'adresse', e.target.value)}
+                            placeholder="ex: 10 rue Example"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={entry.surface}
+                            onChange={(e) => handleInputChange(entry.id, 'surface', e.target.value)}
+                            placeholder="ex: 450"
+                            type="number"
+                            min="0"
+                          />
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      entries.map(entry => (
-                        <TableRow key={entry.id}>
-                          {isEditing === entry.id ? (
-                            // Edit mode
-                            <>
-                              <TableCell>
-                                <Input
-                                  value={editedEntry?.parcelle || ''}
-                                  onChange={(e) => handleEditChange('parcelle', e.target.value)}
-                                  className="max-w-[200px]"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={editedEntry?.adresse || ''}
-                                  onChange={(e) => handleEditChange('adresse', e.target.value)}
-                                  className="max-w-[200px]"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={editedEntry?.section || ''}
-                                  onChange={(e) => handleEditChange('section', e.target.value)}
-                                  className="max-w-[150px]"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={editedEntry?.surface || ''}
-                                  onChange={(e) => handleEditChange('surface', e.target.value)}
-                                  className="max-w-[100px]"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex space-x-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleSaveEdit}
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <Save className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleCancelEdit}
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </>
-                          ) : (
-                            // View mode
-                            <>
-                              <TableCell>{entry.parcelle}</TableCell>
-                              <TableCell>{entry.adresse}</TableCell>
-                              <TableCell>{entry.section}</TableCell>
-                              <TableCell>{entry.surface}</TableCell>
-                              <TableCell>
-                                <div className="flex space-x-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleEditEntry(entry)}
-                                    className="h-8 w-8 p-0"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleDeleteEntry(entry.id)}
-                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                            </>
-                          )}
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            
+            <div className="mt-6 p-4 border border-gray-200 rounded-md bg-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">Surface totale</span>
+                <span className="text-xl font-bold">{getTotalSurface()} m²</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </PageLayout>
   );

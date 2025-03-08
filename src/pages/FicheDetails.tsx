@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Edit2, Trash2, Save, Download } from 'lucide-react';
 import { CompletionCircle } from '@/components/fiches/CompletionCircle';
@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CadastreTable } from '@/components/cadastre/CadastreTable';
 import { TableActions } from '@/components/cadastre/TableActions';
 import { TotalSurface } from '@/components/cadastre/TotalSurface';
+import { ProjectConfigTable } from '@/components/projet/ProjectConfigTable'; 
 import { 
   Select,
   SelectContent,
@@ -720,83 +721,7 @@ export default function FicheDetails() {
           
           <TabsContent value="projet" className="animate-enter opacity-0">
             <Card className="p-6">
-              <h3 className="text-lg font-medium mb-4">Configuration du projet</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Surface plancher</label>
-                    <div className="flex items-center">
-                      <Input 
-                        type="number" 
-                        name="surfacePlancher"
-                        value={fiche.surfacePlancher}
-                        onChange={handleInputChangeForFiche}
-                        placeholder="1200"
-                        disabled={!isEditing}
-                      />
-                      <span className="ml-2">m²</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Nombre de logements</label>
-                    <Input 
-                      type="number" 
-                      name="logements"
-                      value={fiche.logements}
-                      onChange={handleInputChangeForFiche}
-                      placeholder="15"
-                      disabled={!isEditing}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Dont logements sociaux</label>
-                    <Input 
-                      type="number" 
-                      name="logementsSociaux"
-                      value={fiche.logementsSociaux}
-                      onChange={handleInputChangeForFiche}
-                      placeholder="4"
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <h4 className="font-medium">Typologies</h4>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">T2</label>
-                    <Input 
-                      type="number" 
-                      name="logementsTypologies.t2"
-                      value={fiche.logementsTypologies?.t2}
-                      onChange={handleInputChangeForFiche}
-                      placeholder="5"
-                      disabled={!isEditing}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">T3</label>
-                    <Input 
-                      type="number" 
-                      name="logementsTypologies.t3"
-                      value={fiche.logementsTypologies?.t3}
-                      onChange={handleInputChangeForFiche}
-                      placeholder="7"
-                      disabled={!isEditing}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">T4</label>
-                    <Input 
-                      type="number" 
-                      name="logementsTypologies.t4"
-                      value={fiche.logementsTypologies?.t4}
-                      onChange={handleInputChangeForFiche}
-                      placeholder="3"
-                      disabled={!isEditing}
-                    />
-                  </div>
-                </div>
-              </div>
+              <ProjectConfigTable />
             </Card>
           </TabsContent>
           

@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Edit2, Trash2, Save, Download } from 'lucide-react';
 import { CompletionCircle } from '@/components/fiches/CompletionCircle';

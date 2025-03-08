@@ -1,11 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, MapPin, Plus } from 'lucide-react';
 import { CompletionCircle } from './CompletionCircle';
 import { useToast } from '@/hooks/use-toast';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 
 // Type definition for a fiche
 interface Fiche {
@@ -47,7 +50,14 @@ const mockFiches: Fiche[] = [
 
 export function UserFicheList() {
   const [fiches, setFiches] = useState<Fiche[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newFiche, setNewFiche] = useState({
+    address: '',
+    cadastreSection: '',
+    cadastreNumber: ''
+  });
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   // Simuler le chargement des fiches depuis Supabase
   useEffect(() => {
@@ -56,7 +66,16 @@ export function UserFicheList() {
       try {
         // Simuler un délai de chargement
         await new Promise(resolve => setTimeout(resolve, 500));
-        setFiches(mockFiches);
+        
+        // Récupérer les fiches stockées localement ou utiliser les mockFiches
+        const storedFiches = localStorage.getItem('userFiches');
+        if (storedFiches) {
+          setFiches(JSON.parse(storedFiches));
+        } else {
+          setFiches(mockFiches);
+          // Sauvegarder les fiches par défaut dans localStorage
+          localStorage.setItem('userFiches', JSON.stringify(mockFiches));
+        }
       } catch (error) {
         console.error("Erreur lors du chargement des fiches:", error);
         toast({
@@ -70,24 +89,128 @@ export function UserFicheList() {
     loadFiches();
   }, [toast]);
   
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewFiche(prev => ({ ...prev, [name]: value }));
+  };
+  
   const handleCreateFiche = () => {
-    toast({
-      title: "Création de fiche",
-      description: "La création de nouvelles fiches sera disponible prochainement",
+    setIsDialogOpen(true);
+  };
+  
+  const handleSubmitFiche = () => {
+    // Vérifier que tous les champs sont remplis
+    if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
+      toast({
+        title: "Champs incomplets",
+        description: "Veuillez remplir tous les champs",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Créer la nouvelle fiche
+    const newId = Date.now().toString();
+    const createdFiche: Fiche = {
+      id: newId,
+      address: newFiche.address,
+      cadastreSection: newFiche.cadastreSection,
+      cadastreNumber: newFiche.cadastreNumber,
+      completion: 10, // valeur initiale
+      lastUpdated: new Date().toISOString().split('T')[0]
+    };
+    
+    // Ajouter la fiche à la liste
+    const updatedFiches = [...fiches, createdFiche];
+    setFiches(updatedFiches);
+    
+    // Dans une implémentation réelle, sauvegarder dans Supabase
+    // Pour l'instant, sauvegarder dans localStorage
+    localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
+    
+    // Réinitialiser le formulaire et fermer la boîte de dialogue
+    setNewFiche({
+      address: '',
+      cadastreSection: '',
+      cadastreNumber: ''
     });
+    setIsDialogOpen(false);
+    
+    toast({
+      title: "Fiche créée avec succès",
+      description: "La fiche a été ajoutée à votre liste",
+    });
+    
+    // Optionnel: naviguer vers la nouvelle fiche
+    // navigate(`/fiche/${newId}`);
   };
   
   if (fiches.length === 0) {
     return (
       <div className="text-center py-8">
         <p className="text-gray-500 mb-4">Vous n'avez pas encore créé de fiche parcelle.</p>
-        <Button 
-          className="bg-brand hover:bg-brand-dark flex items-center gap-2"
-          onClick={handleCreateFiche}
-        >
-          <Plus className="h-4 w-4" />
-          Créer votre première fiche
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="bg-brand hover:bg-brand-dark flex items-center gap-2"
+              onClick={handleCreateFiche}
+            >
+              <Plus className="h-4 w-4" />
+              Créer votre première fiche
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Créer une nouvelle fiche parcelle</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="address" className="text-right">
+                  Adresse
+                </Label>
+                <Input
+                  id="address"
+                  name="address"
+                  value={newFiche.address}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="15 rue de la Paix, 75001 Paris"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cadastreSection" className="text-right">
+                  Section
+                </Label>
+                <Input
+                  id="cadastreSection"
+                  name="cadastreSection"
+                  value={newFiche.cadastreSection}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="AB"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cadastreNumber" className="text-right">
+                  Numéro
+                </Label>
+                <Input
+                  id="cadastreNumber"
+                  name="cadastreNumber"
+                  value={newFiche.cadastreNumber}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="123"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" onClick={handleSubmitFiche}>
+                Créer la fiche
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -132,13 +255,68 @@ export function UserFicheList() {
       </div>
       
       <div className="text-center mt-8">
-        <Button 
-          className="bg-brand hover:bg-brand-dark flex items-center gap-2"
-          onClick={handleCreateFiche}
-        >
-          <Plus className="h-4 w-4" />
-          Créer une nouvelle fiche
-        </Button>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="bg-brand hover:bg-brand-dark flex items-center gap-2"
+              onClick={handleCreateFiche}
+            >
+              <Plus className="h-4 w-4" />
+              Créer une nouvelle fiche
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Créer une nouvelle fiche parcelle</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="address2" className="text-right">
+                  Adresse
+                </Label>
+                <Input
+                  id="address2"
+                  name="address"
+                  value={newFiche.address}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="15 rue de la Paix, 75001 Paris"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cadastreSection2" className="text-right">
+                  Section
+                </Label>
+                <Input
+                  id="cadastreSection2"
+                  name="cadastreSection"
+                  value={newFiche.cadastreSection}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="AB"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cadastreNumber2" className="text-right">
+                  Numéro
+                </Label>
+                <Input
+                  id="cadastreNumber2"
+                  name="cadastreNumber"
+                  value={newFiche.cadastreNumber}
+                  onChange={handleInputChange}
+                  className="col-span-3"
+                  placeholder="123"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" className="bg-brand hover:bg-brand-dark" onClick={handleSubmitFiche}>
+                Créer la fiche
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

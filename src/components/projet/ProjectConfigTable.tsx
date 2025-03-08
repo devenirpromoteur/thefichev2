@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 interface BuildingEntry {
   id: string;
@@ -38,7 +39,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     },
     { 
       id: '2', 
-      name: 'Bâtiment 2', 
+      name: 'Commerces', 
       footprint: 0, 
       levels: 0, 
       atticCoefficient: 0.45, 
@@ -49,7 +50,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     },
     { 
       id: '3', 
-      name: 'Bâtiment 3', 
+      name: 'Étudiants/Senior', 
       footprint: 0, 
       levels: 0, 
       atticCoefficient: 0.45, 
@@ -60,7 +61,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     },
     { 
       id: '4', 
-      name: 'Bâtiment 4', 
+      name: 'Logistique', 
       footprint: 0, 
       levels: 0, 
       atticCoefficient: 0.45, 
@@ -74,10 +75,15 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
   const [totals, setTotals] = useState({
     totalSdp: 0,
     socialSdp: 0,
-    shabCoefficient: 0.93,
-    shab: 0,
-    socialShab: 0,
-    totalUnits: 15,
+    shabCoefficientLibre: 0.93,
+    shabCoefficientSocial: 0.93,
+    shabLibre: 0,
+    shabSocial: 0,
+    avgSurfacePerUnit: 60,
+    totalUnitsLibre: 0,
+    totalUnitsSocial: 0,
+    internalParkingRatio: 1.5,
+    externalParkingRatio: 0,
     internalParking: 0,
     externalParking: 0,
     commerceSdp: 0,
@@ -120,22 +126,44 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     // Calculate totals
     const totalSdp = updatedBuildings.reduce((sum, building) => sum + building.sdp, 0);
     const socialSdp = updatedBuildings.reduce((sum, building) => sum + building.socialSdp, 0);
-    const shab = totalSdp * totals.shabCoefficient;
-    const socialShab = socialSdp * totals.shabCoefficient;
+    const libreSdp = totalSdp - socialSdp;
+    
+    // Calculate SHAB using the appropriate coefficients
+    const shabLibre = libreSdp * totals.shabCoefficientLibre;
+    const shabSocial = socialSdp * totals.shabCoefficientSocial;
+    
+    // Calculate units based on average surface
+    const totalUnitsLibre = Math.round(shabLibre / totals.avgSurfacePerUnit);
+    const totalUnitsSocial = Math.round(shabSocial / totals.avgSurfacePerUnit);
+    
+    // Calculate parking spots
+    const internalParking = Math.round((totalUnitsLibre + totalUnitsSocial) * totals.internalParkingRatio);
+    const externalParking = Math.round((totalUnitsLibre + totalUnitsSocial) * totals.externalParkingRatio);
 
     setTotals(prev => ({
       ...prev,
       totalSdp,
       socialSdp,
-      shab,
-      socialShab
+      shabLibre,
+      shabSocial,
+      totalUnitsLibre,
+      totalUnitsSocial,
+      internalParking,
+      externalParking
     }));
 
     // Notify parent component of data change
     if (onDataChange) {
       onDataChange(updatedBuildings);
     }
-  }, [buildings, totals.shabCoefficient]);
+  }, [
+    buildings, 
+    totals.shabCoefficientLibre, 
+    totals.shabCoefficientSocial, 
+    totals.avgSurfacePerUnit,
+    totals.internalParkingRatio,
+    totals.externalParkingRatio
+  ]);
 
   // Handle changes to building properties
   const handleBuildingChange = (id: string, field: keyof BuildingEntry, value: any) => {
@@ -162,7 +190,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
       ...prev, 
       { 
         id: newId, 
-        name: `Bâtiment ${newId}`, 
+        name: `Projet ${newId}`, 
         footprint: 0, 
         levels: 0, 
         atticCoefficient: 0.45, 
@@ -192,7 +220,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
             className="flex items-center"
           >
             <Plus className="h-4 w-4 mr-1" />
-            Ajouter un bâtiment
+            Ajouter un projet
           </Button>
         </div>
       </div>
@@ -327,72 +355,128 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.shabCoefficient}
-                    onChange={e => handleTotalChange('shabCoefficient', e.target.value)}
-                    className="text-center"
-                    step="0.01"
-                    min="0"
-                    max="1"
-                  />
+                  <Select 
+                    value={totals.shabCoefficientLibre.toString()} 
+                    onValueChange={value => handleTotalChange('shabCoefficientLibre', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.85">0.85</SelectItem>
+                      <SelectItem value="0.87">0.87</SelectItem>
+                      <SelectItem value="0.9">0.90</SelectItem>
+                      <SelectItem value="0.93">0.93</SelectItem>
+                      <SelectItem value="0.95">0.95</SelectItem>
+                      <SelectItem value="0.98">0.98</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.shabCoefficient}
-                    onChange={e => handleTotalChange('shabCoefficient', e.target.value)}
-                    className="text-center"
-                    step="0.01"
-                    min="0"
-                    max="1"
-                  />
+                  <Select 
+                    value={totals.shabCoefficientSocial.toString()} 
+                    onValueChange={value => handleTotalChange('shabCoefficientSocial', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0.85">0.85</SelectItem>
+                      <SelectItem value="0.87">0.87</SelectItem>
+                      <SelectItem value="0.9">0.90</SelectItem>
+                      <SelectItem value="0.93">0.93</SelectItem>
+                      <SelectItem value="0.95">0.95</SelectItem>
+                      <SelectItem value="0.98">0.98</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">SHAB</TableCell>
                 <TableCell className="text-center">
-                  {((totals.totalSdp - totals.socialSdp) * totals.shabCoefficient).toFixed(0)}
+                  {totals.shabLibre.toFixed(0)}
                 </TableCell>
                 <TableCell className="text-center">
-                  {(totals.socialSdp * totals.shabCoefficient).toFixed(0)}
+                  {totals.shabSocial.toFixed(0)}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">
+                  <div className="flex flex-col">
+                    <span>Surface moyenne</span>
+                    <span>par logement</span>
+                  </div>
+                </TableCell>
+                <TableCell colSpan={2}>
+                  <Select 
+                    value={totals.avgSurfacePerUnit.toString()} 
+                    onValueChange={value => handleTotalChange('avgSurfacePerUnit', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[200px] overflow-y-auto">
+                      {Array.from({ length: 39 }, (_, i) => (i + 2) * 5).map((size) => (
+                        <SelectItem key={size} value={size.toString()}>
+                          {size} m²
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Logements</TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.totalUnits}
-                    onChange={e => handleTotalChange('totalUnits', e.target.value)}
-                    className="text-center"
-                  />
+                <TableCell className="text-center font-medium">
+                  {totals.totalUnitsLibre}
                 </TableCell>
-                <TableCell className="text-center">0</TableCell>
+                <TableCell className="text-center font-medium">
+                  {totals.totalUnitsSocial}
+                </TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Stat' int'</TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.internalParking}
-                    onChange={e => handleTotalChange('internalParking', e.target.value)}
-                    className="text-center"
-                  />
+                <TableCell colSpan={2}>
+                  <Select 
+                    value={totals.internalParkingRatio.toString()} 
+                    onValueChange={value => handleTotalChange('internalParkingRatio', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.5">0.5</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="1.5">1.5</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="2.5">2.5</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
-                <TableCell className="text-center">0</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Stat' ext'</TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.externalParking}
-                    onChange={e => handleTotalChange('externalParking', e.target.value)}
-                    className="text-center"
-                  />
+                <TableCell colSpan={2}>
+                  <Select 
+                    value={totals.externalParkingRatio.toString()} 
+                    onValueChange={value => handleTotalChange('externalParkingRatio', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.5">0.5</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="1.5">1.5</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="2.5">2.5</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
-                <TableCell className="text-center">0</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -496,7 +580,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                 </TableCell>
                 <TableCell className="font-medium text-center">
                   {(
-                    totals.totalSdp * totals.shabCoefficient + 
+                    totals.shabLibre + totals.shabSocial + 
                     totals.commerceSdp * totals.commerceCoefficient + 
                     totals.studentSdp * totals.studentCoefficient + 
                     totals.logisticsSdp * totals.logisticsCoefficient
@@ -507,7 +591,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                 <TableCell className="text-center">0</TableCell>
                 <TableCell className="text-center">0</TableCell>
                 <TableCell className="text-center">0</TableCell>
-                <TableCell className="font-medium text-center text-red-500">{totals.totalUnits}</TableCell>
+                <TableCell className="font-medium text-center text-red-500">{totals.totalUnitsLibre + totals.totalUnitsSocial}</TableCell>
               </TableRow>
               <TableRow>
                 <TableCell>

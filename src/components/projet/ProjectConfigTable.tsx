@@ -84,8 +84,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     totalUnitsSocial: 0,
     internalParkingRatio: 1.5,
     externalParkingRatio: 0,
-    internalParking: 0,
-    externalParking: 0,
+    internalParkingLibre: 0,
+    internalParkingSocial: 0,
+    externalParkingLibre: 0,
+    externalParkingSocial: 0,
     commerceSdp: 0,
     commerceCoefficient: 0.98,
     studentSdp: 0,
@@ -132,13 +134,15 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     const shabLibre = libreSdp * totals.shabCoefficientLibre;
     const shabSocial = socialSdp * totals.shabCoefficientSocial;
     
-    // Calculate units based on average surface
+    // Calculate units based on average surface - separately for Libre and Social
     const totalUnitsLibre = Math.round(shabLibre / totals.avgSurfacePerUnit);
     const totalUnitsSocial = Math.round(shabSocial / totals.avgSurfacePerUnit);
     
-    // Calculate parking spots
-    const internalParking = Math.round((totalUnitsLibre + totalUnitsSocial) * totals.internalParkingRatio);
-    const externalParking = Math.round((totalUnitsLibre + totalUnitsSocial) * totals.externalParkingRatio);
+    // Calculate parking spots - separately for Libre and Social
+    const internalParkingLibre = Math.round(totalUnitsLibre * totals.internalParkingRatio);
+    const internalParkingSocial = Math.round(totalUnitsSocial * totals.internalParkingRatio);
+    const externalParkingLibre = Math.round(totalUnitsLibre * totals.externalParkingRatio);
+    const externalParkingSocial = Math.round(totalUnitsSocial * totals.externalParkingRatio);
 
     setTotals(prev => ({
       ...prev,
@@ -148,8 +152,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
       shabSocial,
       totalUnitsLibre,
       totalUnitsSocial,
-      internalParking,
-      externalParking
+      internalParkingLibre,
+      internalParkingSocial,
+      externalParkingLibre,
+      externalParkingSocial
     }));
 
     // Notify parent component of data change
@@ -435,7 +441,12 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                 </TableCell>
               </TableRow>
               <TableRow>
-                <TableCell className="font-medium">Stat' int'</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex flex-col">
+                    <span>Ratio places</span>
+                    <span>intérieures par logt</span>
+                  </div>
+                </TableCell>
                 <TableCell colSpan={2}>
                   <Select 
                     value={totals.internalParkingRatio.toString()} 
@@ -457,7 +468,12 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                 </TableCell>
               </TableRow>
               <TableRow>
-                <TableCell className="font-medium">Stat' ext'</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex flex-col">
+                    <span>Ratio places</span>
+                    <span>extérieures par logt</span>
+                  </div>
+                </TableCell>
                 <TableCell colSpan={2}>
                   <Select 
                     value={totals.externalParkingRatio.toString()} 
@@ -487,15 +503,52 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
           <Table>
             <TableHeader className="bg-brand/10">
               <TableRow>
-                <TableHead className="text-center">Commerces</TableHead>
-                <TableHead className="text-center">Étudiants / Senior</TableHead>
-                <TableHead className="text-center">Logistique</TableHead>
+                <TableHead className="text-center">Parking</TableHead>
+                <TableHead className="text-center">LIBRE</TableHead>
+                <TableHead className="text-center">Social</TableHead>
                 <TableHead className="text-center">TOTAL</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               <TableRow>
-                <TableCell>
+                <TableCell className="font-medium">Places intérieures</TableCell>
+                <TableCell className="text-center">
+                  {totals.internalParkingLibre}
+                </TableCell>
+                <TableCell className="text-center">
+                  {totals.internalParkingSocial}
+                </TableCell>
+                <TableCell className="text-center font-medium">
+                  {totals.internalParkingLibre + totals.internalParkingSocial}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Places extérieures</TableCell>
+                <TableCell className="text-center">
+                  {totals.externalParkingLibre}
+                </TableCell>
+                <TableCell className="text-center">
+                  {totals.externalParkingSocial}
+                </TableCell>
+                <TableCell className="text-center font-medium">
+                  {totals.externalParkingLibre + totals.externalParkingSocial}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Total places</TableCell>
+                <TableCell className="text-center font-medium">
+                  {totals.internalParkingLibre + totals.externalParkingLibre}
+                </TableCell>
+                <TableCell className="text-center font-medium">
+                  {totals.internalParkingSocial + totals.externalParkingSocial}
+                </TableCell>
+                <TableCell className="text-center font-medium text-red-500">
+                  {totals.internalParkingLibre + totals.internalParkingSocial + totals.externalParkingLibre + totals.externalParkingSocial}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Commerces</TableCell>
+                <TableCell colSpan={2}>
                   <Input 
                     type="number" 
                     value={totals.commerceSdp}
@@ -503,28 +556,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     className="text-center"
                   />
                 </TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.studentSdp}
-                    onChange={e => handleTotalChange('studentSdp', e.target.value)}
-                    className="text-center"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value={totals.logisticsSdp}
-                    onChange={e => handleTotalChange('logisticsSdp', e.target.value)}
-                    className="text-center"
-                  />
-                </TableCell>
-                <TableCell className="font-medium text-center text-red-500">
-                  {(totals.totalSdp + totals.commerceSdp + totals.studentSdp + totals.logisticsSdp).toFixed(0)} m²
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>
+                <TableCell className="text-center">
                   <Select 
                     value={totals.commerceCoefficient.toString()} 
                     onValueChange={value => handleTotalChange('commerceCoefficient', parseFloat(value))}
@@ -542,7 +574,18 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Étudiants/Senior</TableCell>
+                <TableCell colSpan={2}>
+                  <Input 
+                    type="number" 
+                    value={totals.studentSdp}
+                    onChange={e => handleTotalChange('studentSdp', e.target.value)}
+                    className="text-center"
+                  />
+                </TableCell>
+                <TableCell className="text-center">
                   <Select 
                     value={totals.studentCoefficient.toString()} 
                     onValueChange={value => handleTotalChange('studentCoefficient', parseFloat(value))}
@@ -560,7 +603,18 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Logistique</TableCell>
+                <TableCell colSpan={2}>
+                  <Input 
+                    type="number" 
+                    value={totals.logisticsSdp}
+                    onChange={e => handleTotalChange('logisticsSdp', e.target.value)}
+                    className="text-center"
+                  />
+                </TableCell>
+                <TableCell className="text-center">
                   <Select 
                     value={totals.logisticsCoefficient.toString()} 
                     onValueChange={value => handleTotalChange('logisticsCoefficient', parseFloat(value))}
@@ -578,47 +632,6 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     </SelectContent>
                   </Select>
                 </TableCell>
-                <TableCell className="font-medium text-center">
-                  {(
-                    totals.shabLibre + totals.shabSocial + 
-                    totals.commerceSdp * totals.commerceCoefficient + 
-                    totals.studentSdp * totals.studentCoefficient + 
-                    totals.logisticsSdp * totals.logisticsCoefficient
-                  ).toFixed(0)} m²
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell className="text-center">0</TableCell>
-                <TableCell className="text-center">0</TableCell>
-                <TableCell className="text-center">0</TableCell>
-                <TableCell className="font-medium text-center text-red-500">{totals.totalUnitsLibre + totals.totalUnitsSocial}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value="80"
-                    className="text-center"
-                    readOnly
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value="30"
-                    className="text-center"
-                    readOnly
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input 
-                    type="number" 
-                    value="200"
-                    className="text-center"
-                    readOnly
-                  />
-                </TableCell>
-                <TableCell className="font-medium text-center">{totals.internalParking + totals.externalParking}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -627,3 +640,4 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     </div>
   );
 };
+

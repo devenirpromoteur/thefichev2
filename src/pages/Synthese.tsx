@@ -1,12 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Download, Printer, Share2 } from 'lucide-react';
+import { Download, Printer, Share2, Plus, Minus, Image, Eye, EyeOff, Edit, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 
 // Données fictives pour la démonstration
 const projectData = {
@@ -53,7 +63,43 @@ const COLORS = ['#6A5AEF', '#9b87f5', '#4F3CE7', '#E5DEFF'];
 const Synthese = () => {
   const [activeTab, setActiveTab] = useState('apercu');
   const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showImage, setShowImage] = useState(true);
   const { toast } = useToast();
+
+  // Cadastre state
+  const [cadastreEntries, setCadastreEntries] = useState(projectData.cadastre);
+  const [selectedCadastreRow, setSelectedCadastreRow] = useState<string | null>(null);
+
+  // Résumé du projet state
+  const [projectSummary, setProjectSummary] = useState({
+    perimetre: 970,
+    capaciteConstructive: 1200,
+    cos: 1.24,
+    hauteur: 12,
+    etages: 4,
+    capaciteLogements: 1050,
+    logementsLibres: 11,
+    logementsSociaux: 4,
+    stationnementRequis: 18,
+    stationnementPrevu: 20,
+    stationnementExterieur: 12,
+    stationnementInterieur: 8,
+    surfaceBatimentPrincipal: 850,
+    surfaceBatimentsAnnexes: 200,
+    surfaceEspacesVerts: 320
+  });
+
+  // Sections visibles
+  const [visibleSections, setVisibleSections] = useState({
+    aerialPhoto: true,
+    cadastre: true,
+    projet: true,
+    logements: true,
+    stationnement: true,
+    batiments: true,
+    espacesVerts: true
+  });
 
   useEffect(() => {
     // Simulation du chargement des données
@@ -62,6 +108,15 @@ const Synthese = () => {
     }, 1000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    // Calculer le COS dynamiquement
+    const newCos = projectSummary.capaciteConstructive / projectSummary.perimetre;
+    setProjectSummary(prev => ({
+      ...prev,
+      cos: parseFloat(newCos.toFixed(2))
+    }));
+  }, [projectSummary.capaciteConstructive, projectSummary.perimetre]);
 
   const handleDownload = () => {
     toast({
@@ -85,12 +140,85 @@ const Synthese = () => {
     });
   };
 
+  const handleAddCadastreEntry = () => {
+    const newEntry = {
+      id: Date.now().toString(),
+      parcelle: '',
+      adresse: '',
+      section: '',
+      surface: 0
+    };
+    setCadastreEntries([...cadastreEntries, newEntry]);
+  };
+
+  const handleDeleteCadastreEntry = () => {
+    if (selectedCadastreRow) {
+      setCadastreEntries(cadastreEntries.filter(entry => entry.id !== selectedCadastreRow));
+      setSelectedCadastreRow(null);
+      toast({
+        title: "Parcelle supprimée",
+        description: "La parcelle a été supprimée avec succès"
+      });
+    }
+  };
+
+  const handleCadastreChange = (id: string, field: keyof typeof cadastreEntries[0], value: string | number) => {
+    setCadastreEntries(cadastreEntries.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const getTotalSurface = () => {
+    return cadastreEntries.reduce((total, entry) => total + (typeof entry.surface === 'number' ? entry.surface : 0), 0);
+  };
+
+  const toggleSection = (section: keyof typeof visibleSections) => {
+    setVisibleSections({
+      ...visibleSections,
+      [section]: !visibleSections[section]
+    });
+  };
+
+  const handleSummaryChange = (field: keyof typeof projectSummary, value: number) => {
+    setProjectSummary({
+      ...projectSummary,
+      [field]: value
+    });
+  };
+
+  const toggleEditing = () => {
+    setIsEditing(!isEditing);
+    if (isEditing) {
+      toast({
+        title: "Modifications enregistrées",
+        description: "Les changements ont été sauvegardés avec succès"
+      });
+    }
+  };
+
   return (
     <PageLayout>
       <div className="space-y-6 animate-fade-in">
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-brand">Synthèse du projet</h1>
           <div className="flex space-x-2">
+            <Button 
+              variant={isEditing ? "secondary" : "outline"} 
+              size="sm" 
+              onClick={toggleEditing}
+            >
+              {isEditing ? (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Enregistrer
+                </>
+              ) : (
+                <>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Modifier
+                </>
+              )}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleDownload}>
               <Download className="mr-2 h-4 w-4" />
               Exporter
@@ -115,90 +243,458 @@ const Synthese = () => {
           </TabsList>
           
           <TabsContent value="apercu" className="space-y-4 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="border-l-4 border-l-brand">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground">Surface totale du terrain</div>
-                  <div className="text-2xl font-bold">{projectData.projet.surfaceTotale} m²</div>
-                </CardContent>
-              </Card>
-              <Card className="border-l-4 border-l-brand-light">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground">Nombre de logements</div>
-                  <div className="text-2xl font-bold">{projectData.projet.nombreLogements} logements</div>
-                </CardContent>
-              </Card>
-              <Card className="border-l-4 border-l-brand-dark">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground">Dont logements sociaux</div>
-                  <div className="text-2xl font-bold">{projectData.projet.logementSocial} logements</div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Répartition des typologies</CardTitle>
-                </CardHeader>
+            {/* Photo aérienne */}
+            <Card className="border-l-4 border-l-brand">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Photo aérienne du projet</CardTitle>
+                <div className="flex space-x-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setShowImage(!showImage)}
+                  >
+                    {showImage ? (
+                      <EyeOff className="h-4 w-4" /> 
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => toast({
+                      title: "Sélection d'image", 
+                      description: "Fonctionnalité de changement d'image à intégrer"
+                    })}
+                  >
+                    <Image className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              {showImage && (
                 <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={typologiesData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={100}
-                          fill="#8884d8"
-                          dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  <div className="bg-gray-100 rounded-md w-full h-64 flex items-center justify-center text-gray-500">
+                    <div className="text-center">
+                      <Image className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>Photo aérienne du projet</p>
+                      <p className="text-sm">(Placez ici une photo du module Images)</p>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* Parcelles cadastrales */}
+            <Card className="border-l-4 border-l-brand-light">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Parcelles cadastrales</CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => toggleSection('cadastre')}
+                >
+                  {visibleSections.cadastre ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </Button>
+              </CardHeader>
+              {visibleSections.cadastre && (
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleAddCadastreEntry}
+                          disabled={!isEditing}
                         >
-                          {typologiesData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Plus className="h-4 w-4 mr-1" /> Ajouter
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleDeleteCadastreEntry}
+                          disabled={!selectedCadastreRow || !isEditing}
+                          className="text-red-500"
+                        >
+                          <Minus className="h-4 w-4 mr-1" /> Supprimer
+                        </Button>
+                      </div>
+                    </div>
+                  
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Parcelle</TableHead>
+                            <TableHead>Adresse</TableHead>
+                            <TableHead>Section</TableHead>
+                            <TableHead>Surface (m²)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {cadastreEntries.map((entry) => (
+                            <TableRow 
+                              key={entry.id} 
+                              className={`${selectedCadastreRow === entry.id ? "bg-brand/10" : ""} ${isEditing ? "cursor-pointer" : ""}`}
+                              onClick={() => isEditing && setSelectedCadastreRow(entry.id)}
+                            >
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input 
+                                    value={entry.parcelle} 
+                                    onChange={(e) => handleCadastreChange(entry.id, 'parcelle', e.target.value)}
+                                    className="h-8"
+                                  />
+                                ) : entry.parcelle}
+                              </TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input 
+                                    value={entry.adresse} 
+                                    onChange={(e) => handleCadastreChange(entry.id, 'adresse', e.target.value)}
+                                    className="h-8"
+                                  />
+                                ) : entry.adresse}
+                              </TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input 
+                                    value={entry.section} 
+                                    onChange={(e) => handleCadastreChange(entry.id, 'section', e.target.value)}
+                                    className="h-8"
+                                  />
+                                ) : entry.section}
+                              </TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <Input 
+                                    type="number" 
+                                    value={entry.surface} 
+                                    onChange={(e) => handleCadastreChange(entry.id, 'surface', Number(e.target.value))}
+                                    className="h-8"
+                                  />
+                                ) : entry.surface}
+                              </TableCell>
+                            </TableRow>
                           ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
+                        </TableBody>
+                      </Table>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-3 rounded-md border">
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium">Surface totale</span>
+                        <span className="text-xl font-bold text-brand">{getTotalSurface()} m²</span>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
-              </Card>
+              )}
+            </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Surfaces du projet</CardTitle>
-                </CardHeader>
+            {/* Résumé du projet */}
+            <Card className="border-l-4 border-l-brand-dark">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Résumé du projet</CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => toggleSection('projet')}
+                >
+                  {visibleSections.projet ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </Button>
+              </CardHeader>
+              {visibleSections.projet && (
                 <CardContent>
-                  <div className="h-[300px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        width={500}
-                        height={300}
-                        data={surfaceData}
-                        margin={{
-                          top: 5,
-                          right: 30,
-                          left: 20,
-                          bottom: 5,
-                        }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Bar dataKey="surface" fill="#4F3CE7" name="Surface (m²)" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>Périmètre foncier (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.perimetre} 
+                            onChange={(e) => handleSummaryChange('perimetre', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.perimetre}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Capacité constructive (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.capaciteConstructive} 
+                            onChange={(e) => handleSummaryChange('capaciteConstructive', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.capaciteConstructive}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Coefficient d'occupation des sols (COS)</Label>
+                        <span className="font-medium">{projectSummary.cos}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Hauteur du bâtiment (m)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.hauteur} 
+                            onChange={(e) => handleSummaryChange('hauteur', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.hauteur}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Nombre d'étages</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.etages} 
+                            onChange={(e) => handleSummaryChange('etages', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.etages}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>Capacité totale logements (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.capaciteLogements} 
+                            onChange={(e) => handleSummaryChange('capaciteLogements', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.capaciteLogements}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Surface du bâtiment principal (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.surfaceBatimentPrincipal} 
+                            onChange={(e) => handleSummaryChange('surfaceBatimentPrincipal', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.surfaceBatimentPrincipal}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Surface des bâtiments annexes (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.surfaceBatimentsAnnexes} 
+                            onChange={(e) => handleSummaryChange('surfaceBatimentsAnnexes', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.surfaceBatimentsAnnexes}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Surface des espaces verts (m²)</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.surfaceEspacesVerts} 
+                            onChange={(e) => handleSummaryChange('surfaceEspacesVerts', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.surfaceEspacesVerts}</span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+              )}
+            </Card>
 
+            {/* Répartition des logements */}
+            <Card className="border-l-4 border-l-brand">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Répartition des logements</CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => toggleSection('logements')}
+                >
+                  {visibleSections.logements ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </Button>
+              </CardHeader>
+              {visibleSections.logements && (
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label>Logements libres</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.logementsLibres} 
+                            onChange={(e) => handleSummaryChange('logementsLibres', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.logementsLibres}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label>Logements sociaux</Label>
+                        {isEditing ? (
+                          <Input 
+                            type="number" 
+                            value={projectSummary.logementsSociaux} 
+                            onChange={(e) => handleSummaryChange('logementsSociaux', Number(e.target.value))}
+                            className="w-24 h-8 text-right"
+                          />
+                        ) : (
+                          <span className="font-medium">{projectSummary.logementsSociaux}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between font-medium">
+                        <span>Total logements</span>
+                        <span className="text-brand">
+                          {projectSummary.logementsLibres + projectSummary.logementsSociaux}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-[200px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Libres', value: projectSummary.logementsLibres },
+                              { name: 'Sociaux', value: projectSummary.logementsSociaux }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          >
+                            {typologiesData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            {/* Stationnement */}
+            <Card className="border-l-4 border-l-brand-light">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Stationnement</CardTitle>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => toggleSection('stationnement')}
+                >
+                  {visibleSections.stationnement ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                </Button>
+              </CardHeader>
+              {visibleSections.stationnement && (
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Places requises par réglementation</Label>
+                          {isEditing ? (
+                            <Input 
+                              type="number" 
+                              value={projectSummary.stationnementRequis} 
+                              onChange={(e) => handleSummaryChange('stationnementRequis', Number(e.target.value))}
+                              className="w-24 h-8 text-right"
+                            />
+                          ) : (
+                            <span className="font-medium">{projectSummary.stationnementRequis}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label>Places prévues dans le projet</Label>
+                          {isEditing ? (
+                            <Input 
+                              type="number" 
+                              value={projectSummary.stationnementPrevu} 
+                              onChange={(e) => handleSummaryChange('stationnementPrevu', Number(e.target.value))}
+                              className="w-24 h-8 text-right"
+                            />
+                          ) : (
+                            <span className="font-medium">{projectSummary.stationnementPrevu}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>Places en intérieur</Label>
+                          {isEditing ? (
+                            <Input 
+                              type="number" 
+                              value={projectSummary.stationnementInterieur} 
+                              onChange={(e) => handleSummaryChange('stationnementInterieur', Number(e.target.value))}
+                              className="w-24 h-8 text-right"
+                            />
+                          ) : (
+                            <span className="font-medium">{projectSummary.stationnementInterieur}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label>Places en extérieur</Label>
+                          {isEditing ? (
+                            <Input 
+                              type="number" 
+                              value={projectSummary.stationnementExterieur} 
+                              onChange={(e) => handleSummaryChange('stationnementExterieur', Number(e.target.value))}
+                              className="w-24 h-8 text-right"
+                            />
+                          ) : (
+                            <span className="font-medium">{projectSummary.stationnementExterieur}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="rounded-md p-3 bg-gray-50 border mt-2">
+                      <div className="flex justify-between">
+                        <div className="font-medium">
+                          Ratio place/logement
+                        </div>
+                        <div className="font-medium">
+                          {((projectSummary.stationnementInterieur + projectSummary.stationnementExterieur) / 
+                            (projectSummary.logementsLibres + projectSummary.logementsSociaux)).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          </TabsContent>
+          
           <TabsContent value="cadastre" className="space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>

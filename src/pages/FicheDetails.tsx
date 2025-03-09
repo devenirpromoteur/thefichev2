@@ -4,7 +4,7 @@ import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Edit2, Trash2, Save, Download } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Save, Download, Printer, Share2 } from 'lucide-react';
 import { CompletionCircle } from '@/components/fiches/CompletionCircle';
 import { useToast } from '@/hooks/use-toast';
 import { CadastreTable } from '@/components/cadastre/CadastreTable';
@@ -19,6 +19,13 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { AerialPhoto } from '@/components/synthese/AerialPhoto';
+import { ProjectSummary } from '@/components/synthese/ProjectSummary';
+import { HousingDistribution } from '@/components/synthese/HousingDistribution';
+import { ParkingSection } from '@/components/synthese/ParkingSection';
+import { CadastreTab } from '@/components/synthese/CadastreTab';
+import { ResidentsTab } from '@/components/synthese/ResidentsTab';
+import { ProjectTab } from '@/components/synthese/ProjectTab';
 
 interface Fiche {
   id: string;
@@ -73,6 +80,34 @@ export default function FicheDetails() {
   const [entries, setEntries] = useState<CadastreEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
+  const [showImage, setShowImage] = useState(true);
+  const [visibleSections, setVisibleSections] = useState({
+    aerialPhoto: true,
+    cadastre: true,
+    projet: true,
+    logements: true,
+    stationnement: true,
+    batiments: true,
+    espacesVerts: true
+  });
+  const [projectSummary, setProjectSummary] = useState({
+    perimetre: 970,
+    capaciteConstructive: 1200,
+    cos: 1.24,
+    hauteur: 12,
+    etages: 4,
+    capaciteLogements: 1050,
+    logementsLibres: 11,
+    logementsSociaux: 4,
+    stationnementRequis: 18,
+    stationnementPrevu: 20,
+    stationnementExterieur: 12,
+    stationnementInterieur: 8,
+    surfaceBatimentPrincipal: 850,
+    surfaceBatimentsAnnexes: 200,
+    surfaceEspacesVerts: 320
+  });
+
   useEffect(() => {
     const loadFiche = async () => {
       setLoading(true);
@@ -370,6 +405,42 @@ export default function FicheDetails() {
     toast({
       title: "Export en cours",
       description: "Votre fiche est en cours d'export au format PDF"
+    });
+  };
+
+  const handleSummaryChange = (field: string, value: number) => {
+    setProjectSummary({
+      ...projectSummary,
+      [field]: value
+    });
+  };
+
+  const toggleSection = (section: keyof typeof visibleSections) => {
+    setVisibleSections({
+      ...visibleSections,
+      [section]: !visibleSections[section]
+    });
+  };
+
+  const handleDownload = () => {
+    toast({
+      title: "Export PDF",
+      description: "Le téléchargement de votre rapport commence...",
+    });
+  };
+
+  const handlePrint = () => {
+    toast({
+      title: "Impression",
+      description: "Préparation de l'impression...",
+    });
+    window.print();
+  };
+
+  const handleShare = () => {
+    toast({
+      title: "Partage",
+      description: "Lien de partage copié dans le presse-papier",
     });
   };
 
@@ -726,112 +797,101 @@ export default function FicheDetails() {
           </TabsContent>
           
           <TabsContent value="synthese" className="animate-enter opacity-0">
-            <Card className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-medium">Synthèse du projet</h3>
+            <div className="space-y-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-brand">Synthèse du projet</h2>
                 <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" onClick={handleExport}>
+                  <Button variant="outline" size="sm" onClick={handleDownload}>
                     <Download className="mr-2 h-4 w-4" />
                     Exporter
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handlePrint}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimer
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleShare}>
+                    <Share2 className="mr-2 h-4 w-4" />
+                    Partager
                   </Button>
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
-                  <div className="text-sm text-gray-500">Surface totale</div>
-                  <div className="text-xl font-semibold">{fiche.surfacePlancher} m²</div>
-                </div>
-                <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
-                  <div className="text-sm text-gray-500">Nombre de logements</div>
-                  <div className="text-xl font-semibold">{fiche.logements} logements</div>
-                </div>
-                <div className="border-l-4 border-l-brand p-4 bg-gray-50 rounded">
-                  <div className="text-sm text-gray-500">Dont sociaux</div>
-                  <div className="text-xl font-semibold">
-                    {fiche.logementsSociaux} logements 
-                    ({fiche.logements && fiche.logementsSociaux ? Math.round((fiche.logementsSociaux / fiche.logements) * 100) : 0}%)
-                  </div>
-                </div>
-              </div>
+              <AerialPhoto 
+                showImage={showImage} 
+                setShowImage={setShowImage} 
+              />
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium mb-3">Répartition des typologies</h4>
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Pourcentage</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="px-4 py-2">T2</td>
-                        <td className="px-4 py-2">{fiche.logementsTypologies?.t2}</td>
-                        <td className="px-4 py-2">
-                          {fiche.logements && fiche.logementsTypologies?.t2 
-                            ? Math.round((fiche.logementsTypologies.t2 / fiche.logements) * 100) 
-                            : 0}%
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-2">T3</td>
-                        <td className="px-4 py-2">{fiche.logementsTypologies?.t3}</td>
-                        <td className="px-4 py-2">
-                          {fiche.logements && fiche.logementsTypologies?.t3 
-                            ? Math.round((fiche.logementsTypologies.t3 / fiche.logements) * 100) 
-                            : 0}%
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-2">T4</td>
-                        <td className="px-4 py-2">{fiche.logementsTypologies?.t4}</td>
-                        <td className="px-4 py-2">
-                          {fiche.logements && fiche.logementsTypologies?.t4 
-                            ? Math.round((fiche.logementsTypologies.t4 / fiche.logements) * 100) 
-                            : 0}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-3">Contraintes PLU</h4>
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead>
-                      <tr>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Élément</th>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Autorisé</th>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Projet</th>
-                        <th className="px-4 py-2 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="px-4 py-2">Emprise</td>
-                        <td className="px-4 py-2">70%</td>
-                        <td className="px-4 py-2">65%</td>
-                        <td className="px-4 py-2 text-green-600">Conforme</td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-2">Hauteur</td>
-                        <td className="px-4 py-2">{fiche.hauteurMax}m</td>
-                        <td className="px-4 py-2">11m</td>
-                        <td className="px-4 py-2 text-green-600">Conforme</td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-2">Parking</td>
-                        <td className="px-4 py-2">1,5/log</td>
-                        <td className="px-4 py-2">1,2/log</td>
-                        <td className="px-4 py-2 text-red-600">Non conforme</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </Card>
+              <ProjectSummary 
+                projectSummary={projectSummary}
+                handleSummaryChange={handleSummaryChange}
+                isEditing={isEditing}
+                visibleSections={{ projet: visibleSections.projet }}
+                toggleSection={() => toggleSection('projet')}
+              />
+              
+              <HousingDistribution 
+                projectSummary={projectSummary}
+                handleSummaryChange={handleSummaryChange}
+                isEditing={isEditing}
+                visibleSections={{ logements: visibleSections.logements }}
+                toggleSection={() => toggleSection('logements')}
+              />
+              
+              <ParkingSection 
+                projectSummary={projectSummary}
+                handleSummaryChange={handleSummaryChange}
+                isEditing={isEditing}
+                visibleSections={{ stationnement: visibleSections.stationnement }}
+                toggleSection={() => toggleSection('stationnement')}
+              />
+              
+              {entries.length > 0 && (
+                <CadastreTab 
+                  projectData={{
+                    cadastre: entries.map(entry => ({
+                      id: entry.id,
+                      parcelle: entry.parcelle,
+                      adresse: entry.adresse,
+                      section: entry.section,
+                      surface: parseInt(entry.surface) || 0
+                    })), 
+                    plu: [{
+                      id: '1',
+                      zone: fiche?.zone || 'UA',
+                      empriseMax: fiche?.empriseAuSol || 70,
+                      hauteurMax: fiche?.hauteurMax || 14,
+                      espacesVerts: fiche?.espacesVerts || 20,
+                      stationnement: 1.5
+                    }]
+                  }}
+                />
+              )}
+              
+              {fiche?.occupants && (
+                <ResidentsTab 
+                  projectData={{
+                    residents: fiche?.occupants || []
+                  }}
+                />
+              )}
+              
+              <ProjectTab 
+                projectData={{
+                  projet: {
+                    surfaceTotale: getTotalSurface(),
+                    surfacePlancher: fiche?.surfacePlancher || 1200,
+                    nombreLogements: fiche?.logements || 15,
+                    typologies: {
+                      t2: fiche?.logementsTypologies?.t2 || 5,
+                      t3: fiche?.logementsTypologies?.t3 || 7,
+                      t4: fiche?.logementsTypologies?.t4 || 3
+                    },
+                    logementSocial: fiche?.logementsSociaux || 4,
+                    parking: 18
+                  }
+                }}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

@@ -39,10 +39,13 @@ const App = () => (
           <Route path="/plu" element={<PLU />} />
           <Route path="/residents" element={<Residents />} />
           <Route path="/projet" element={<Projet />} />
-          <Route path="/synthese" element={<Synthese />} />
+          <Route path="/fiche/:ficheId" element={<FicheDetails />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/fiche/:ficheId" element={<FicheDetails />} />
+          
+          {/* Route maintenue mais rendue moins accessible */}
+          <Route path="/synthese" element={<Synthese />} />
+          
           {/* Toutes les routes personnalisées doivent être ajoutées au-dessus de la route catch-all "*" */}
           <Route path="*" element={<NotFound />} />
         </Routes>

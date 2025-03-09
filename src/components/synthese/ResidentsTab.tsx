@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 interface ResidentsTabProps {
   projectData: {
     residents: Array<{
-      id: string;
+      id?: string;
       type: string;
       nombre: number;
       statut: string;
@@ -20,7 +20,7 @@ export const ResidentsTab: React.FC<ResidentsTabProps> = ({ projectData }) => {
         <CardTitle>Résidents actuels</CardTitle>
       </CardHeader>
       <CardContent>
-        <table className="data-table">
+        <table className="data-table w-full">
           <thead>
             <tr>
               <th>Type d'occupation</th>
@@ -29,8 +29,8 @@ export const ResidentsTab: React.FC<ResidentsTabProps> = ({ projectData }) => {
             </tr>
           </thead>
           <tbody>
-            {projectData.residents.map((item) => (
-              <tr key={item.id}>
+            {projectData.residents.map((item, index) => (
+              <tr key={item.id || index}>
                 <td>{item.type}</td>
                 <td>{item.nombre}</td>
                 <td>{item.statut}</td>

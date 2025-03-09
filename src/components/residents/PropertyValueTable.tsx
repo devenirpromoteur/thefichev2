@@ -26,6 +26,7 @@ type PropertyEntry = {
   etat: number | '';
   valeur: number;
   dvf: number | '';
+  cadastreId: string; // Added to track the source cadastre entry
 };
 
 interface PropertyValueTableProps {
@@ -44,6 +45,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
   const { toast } = useToast();
   const [entries, setEntries] = useState<PropertyEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
+  const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
 
   const propertyTypes = [
     "Logements",
@@ -55,22 +57,107 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     "Garages"
   ];
 
+  // Load saved property values or initialize with cadastre entries
   useEffect(() => {
     if (ficheId) {
-      // Load saved property values if they exist
       const storedData = localStorage.getItem(`propertyValues_${ficheId}`);
       if (storedData) {
         setEntries(JSON.parse(storedData));
-      } else if (cadastreEntries.length > 0 && entries.length === 0) {
-        // Initialize with first cadastre entry if no data exists
-        handleAddEntry();
       }
     }
-  }, [ficheId, cadastreEntries]);
+  }, [ficheId]);
 
+  // Track which cadastre entries have been processed
+  useEffect(() => {
+    if (entries.length > 0) {
+      setProcessedCadastreIds(entries.filter(entry => entry.cadastreId).map(entry => entry.cadastreId));
+    }
+  }, [entries]);
+
+  // Synchronize with cadastre entries: add new entries from cadastre
+  useEffect(() => {
+    if (cadastreEntries.length > 0 && ficheId) {
+      // Find cadastre entries that don't have a corresponding property entry
+      const newCadastreEntries = cadastreEntries.filter(
+        cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
+      );
+
+      if (newCadastreEntries.length > 0) {
+        const newPropertyEntries = newCadastreEntries.map(cadastreEntry => ({
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+          section: cadastreEntry.section || '',
+          parcelle: cadastreEntry.parcelle || '',
+          type: 'Logements',
+          surface: '',
+          abattement: 1,
+          prixM2: '',
+          tauxCap: 0.05,
+          etat: 1,
+          valeur: 0,
+          dvf: '',
+          cadastreId: cadastreEntry.id
+        }));
+
+        setEntries(prev => [...prev, ...newPropertyEntries]);
+        
+        toast({
+          title: "Nouvelles parcelles ajoutées",
+          description: `${newPropertyEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
+        });
+      }
+
+      // Check for deleted cadastre entries and remove corresponding property entries
+      const existingCadastreIds = cadastreEntries.map(entry => entry.id);
+      const entriesWithDeletedCadastre = entries.filter(
+        entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
+      );
+
+      if (entriesWithDeletedCadastre.length > 0) {
+        setEntries(prev => prev.filter(entry => 
+          !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
+        ));
+        
+        toast({
+          title: "Parcelles supprimées",
+          description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
+        });
+      }
+
+      // Update section/parcelle info for existing entries if they changed in cadastre
+      let updatedEntries = false;
+      const newEntries = entries.map(entry => {
+        if (entry.cadastreId) {
+          const correspondingCadastreEntry = cadastreEntries.find(
+            cadastreEntry => cadastreEntry.id === entry.cadastreId
+          );
+          
+          if (correspondingCadastreEntry && 
+              (entry.section !== correspondingCadastreEntry.section || 
+               entry.parcelle !== correspondingCadastreEntry.parcelle)) {
+            updatedEntries = true;
+            return {
+              ...entry,
+              section: correspondingCadastreEntry.section,
+              parcelle: correspondingCadastreEntry.parcelle
+            };
+          }
+        }
+        return entry;
+      });
+
+      if (updatedEntries) {
+        setEntries(newEntries);
+        toast({
+          title: "Parcelles mises à jour",
+          description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
+        });
+      }
+    }
+  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries]);
+
+  // Save changes to localStorage
   useEffect(() => {
     if (ficheId && entries.length > 0) {
-      // Save to localStorage whenever entries change
       localStorage.setItem(`propertyValues_${ficheId}`, JSON.stringify(entries));
     }
   }, [entries, ficheId]);
@@ -89,7 +176,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       tauxCap: 0.05,
       etat: 1,
       valeur: 0,
-      dvf: ''
+      dvf: '',
+      cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
     };
     
     setEntries(prev => [...prev, newEntry]);
@@ -136,8 +224,22 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     const prixM2 = Number(entry.prixM2);
     const etat = Number(entry.etat);
     
+    // Special calculation for parking
+    if (entry.type === 'Parkings') {
+      const tauxCap = Number(entry.tauxCap);
+      
+      // Base calculation for parking: (Nb_places × Prix_unitaire) × Abattement × État
+      const baseValue = surface * prixM2 * abattement * etat;
+      
+      // If using capitalization rate for tertiary properties
+      if (tauxCap && tauxCap > 0) {
+        return (baseValue / tauxCap) / 1000;
+      } else {
+        return baseValue / 1000;
+      }
+    }
     // For residential properties
-    if (entry.type === 'Logements') {
+    else if (entry.type === 'Logements') {
       return (surface * abattement * prixM2 * etat) / 1000;
     } 
     // For commercial/tertiary properties
@@ -177,7 +279,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
         entry.id === id ? { 
           ...entry, 
           section: selectedCadastre.section,
-          parcelle: selectedCadastre.parcelle
+          parcelle: selectedCadastre.parcelle,
+          cadastreId: selectedCadastre.id // Update the link to cadastre
         } : entry
       ));
     }
@@ -187,6 +290,16 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
   const formatCurrency = (value: number | ''): string => {
     if (value === '') return '0 K€';
     return `${value.toFixed(2)} K€`;
+  };
+
+  // Helper function to get placeholder text based on property type
+  const getSurfacePlaceholder = (type: string): string => {
+    return type === 'Parkings' ? 'Nombre de places' : 'Surface (m²)';
+  };
+
+  // Helper function to get placeholder text for price field based on property type
+  const getPricePlaceholder = (type: string): string => {
+    return type === 'Parkings' ? 'Prix par place' : 'Prix au m²';
   };
 
   return (
@@ -298,7 +411,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
               >
                 <TableCell>
                   <Select 
-                    value={cadastreEntries.find(c => c.section === entry.section && c.parcelle === entry.parcelle)?.id || ""}
+                    value={entry.cadastreId || ""}
                     onValueChange={(value) => handleCadastreSelect(entry.id, value)}
                   >
                     <SelectTrigger className="h-8">
@@ -337,6 +450,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     onChange={(e) => handleInputChange(entry.id, 'surface', e.target.value === '' ? '' : Number(e.target.value))}
                     className="h-8"
                     min="0"
+                    placeholder={getSurfacePlaceholder(entry.type)}
                   />
                 </TableCell>
                 <TableCell>
@@ -357,6 +471,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     onChange={(e) => handleInputChange(entry.id, 'prixM2', e.target.value === '' ? '' : Number(e.target.value))}
                     className="h-8"
                     min="0"
+                    placeholder={getPricePlaceholder(entry.type)}
                   />
                 </TableCell>
                 <TableCell>
@@ -434,6 +549,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
         <p>Formules de calcul :</p>
         <ul className="list-disc list-inside space-y-1 ml-4 mt-1">
           <li><span className="font-medium">Logements :</span> Valeur (K€) = (Surface × Abattement × Prix m² × État) / 1000</li>
+          <li><span className="font-medium">Parkings :</span> Valeur (K€) = (Nombre de places × Prix unitaire × Abattement × État) / 1000</li>
           <li><span className="font-medium">Autres types :</span> Valeur (K€) = (Surface × Abattement × (Prix m² / Taux Cap) × État) / 1000</li>
         </ul>
       </div>

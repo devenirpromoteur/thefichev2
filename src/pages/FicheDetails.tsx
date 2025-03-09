@@ -28,6 +28,7 @@ import { ResidentsTab } from '@/components/synthese/ResidentsTab';
 import { ProjectTab } from '@/components/synthese/ProjectTab';
 import ImageGallery from '@/components/images/ImageGallery';
 import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
+import { LandSummaryTable } from '@/components/residents/LandSummaryTable';
 
 interface Fiche {
   id: string;
@@ -762,36 +763,20 @@ export default function FicheDetails() {
           
           <TabsContent value="residents" className="animate-enter opacity-0">
             <Card className="p-6">
-              <h3 className="text-lg font-medium mb-4">Occupants actuels</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                      <th className="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {fiche.occupants?.map((occupant, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-3">{occupant.type}</td>
-                        <td className="px-4 py-3">{occupant.nombre}</td>
-                        <td className="px-4 py-3">{occupant.statut}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {isEditing && (
-                <Button className="mt-4 bg-brand hover:bg-brand-dark">
-                  Ajouter un occupant
-                </Button>
-              )}
-              
-              <div className="mt-8">
+              <div className="mt-2">
                 <PropertyValueTable 
                   ficheId={ficheId} 
+                  cadastreEntries={entries.map(entry => ({
+                    id: entry.id,
+                    section: entry.section,
+                    parcelle: entry.parcelle
+                  }))}
+                />
+              </div>
+              
+              <div className="mt-8">
+                <LandSummaryTable
+                  ficheId={ficheId}
                   cadastreEntries={entries.map(entry => ({
                     id: entry.id,
                     section: entry.section,

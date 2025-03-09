@@ -818,7 +818,8 @@ export default function FicheDetails() {
               
               <AerialPhoto 
                 showImage={showImage} 
-                setShowImage={setShowImage} 
+                setShowImage={setShowImage}
+                ficheId={ficheId}
               />
               
               <ProjectSummary 

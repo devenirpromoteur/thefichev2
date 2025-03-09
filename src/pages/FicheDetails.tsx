@@ -27,6 +27,7 @@ import { CadastreTab } from '@/components/synthese/CadastreTab';
 import { ResidentsTab } from '@/components/synthese/ResidentsTab';
 import { ProjectTab } from '@/components/synthese/ProjectTab';
 import ImageGallery from '@/components/images/ImageGallery';
+import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
 
 interface Fiche {
   id: string;
@@ -787,6 +788,17 @@ export default function FicheDetails() {
                   Ajouter un occupant
                 </Button>
               )}
+              
+              <div className="mt-8">
+                <PropertyValueTable 
+                  ficheId={ficheId} 
+                  cadastreEntries={entries.map(entry => ({
+                    id: entry.id,
+                    section: entry.section,
+                    parcelle: entry.parcelle
+                  }))}
+                />
+              </div>
             </Card>
           </TabsContent>
           

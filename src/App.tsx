@@ -7,7 +7,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Cadastre from "./pages/Cadastre";
-import Images from "./pages/Images";
 import PLU from "./pages/PLU";
 import Residents from "./pages/Residents";
 import Projet from "./pages/Projet";
@@ -35,7 +34,6 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/cadastre" element={<Cadastre />} />
-          <Route path="/images" element={<Images />} />
           <Route path="/plu" element={<PLU />} />
           <Route path="/residents" element={<Residents />} />
           <Route path="/projet" element={<Projet />} />

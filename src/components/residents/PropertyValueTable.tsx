@@ -83,7 +83,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       );
 
       if (newCadastreEntries.length > 0) {
-        const newPropertyEntries = newCadastreEntries.map(cadastreEntry => ({
+        const newPropertyEntries: PropertyEntry[] = newCadastreEntries.map(cadastreEntry => ({
           id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
           section: cadastreEntry.section || '',
           parcelle: cadastreEntry.parcelle || '',
@@ -233,7 +233,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       
       // If using capitalization rate for tertiary properties
       if (tauxCap && tauxCap > 0) {
-        return (baseValue / tauxCap) / 1000;
+        return baseValue / (tauxCap * 1000);
       } else {
         return baseValue / 1000;
       }
@@ -247,7 +247,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       const tauxCap = Number(entry.tauxCap);
       if (!tauxCap) return 0; // Prevent division by zero
       
-      return (surface * abattement * (prixM2 / tauxCap) * etat) / 1000;
+      return (surface * abattement * prixM2 * etat) / (tauxCap * 1000);
     }
   };
 
@@ -550,7 +550,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
         <ul className="list-disc list-inside space-y-1 ml-4 mt-1">
           <li><span className="font-medium">Logements :</span> Valeur (K€) = (Surface × Abattement × Prix m² × État) / 1000</li>
           <li><span className="font-medium">Parkings :</span> Valeur (K€) = (Nombre de places × Prix unitaire × Abattement × État) / 1000</li>
-          <li><span className="font-medium">Autres types :</span> Valeur (K€) = (Surface × Abattement × (Prix m² / Taux Cap) × État) / 1000</li>
+          <li><span className="font-medium">Autres types :</span> Valeur (K€) = (Surface × Abattement × Prix m² × État) / (T.cap × 1000)</li>
         </ul>
       </div>
     </div>

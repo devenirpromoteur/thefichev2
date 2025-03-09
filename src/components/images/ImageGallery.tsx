@@ -39,7 +39,9 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ ficheId, readOnly = 
 
   useEffect(() => {
     // Chargement des images depuis le localStorage
-    loadImages();
+    if (ficheId) {
+      loadImages();
+    }
   }, [ficheId]);
 
   const loadImages = () => {
@@ -51,6 +53,8 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ ficheId, readOnly = 
         const filteredImages = ficheId 
           ? allImages.filter(img => img.ficheId === ficheId)
           : allImages;
+        
+        console.log(`Loaded ${filteredImages.length} images for ficheId ${ficheId}`);
         setImages(filteredImages);
       }
     } catch (error) {
@@ -67,16 +71,17 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ ficheId, readOnly = 
     try {
       // Si nous avons un ficheId, nous devons mettre à jour uniquement les images de cette fiche
       // tout en préservant les autres images
+      const storedImages = localStorage.getItem('projectImages');
+      const allImages: ImageItem[] = storedImages ? JSON.parse(storedImages) : [];
+      
       if (ficheId) {
-        const storedImages = localStorage.getItem('projectImages');
-        const allImages: ImageItem[] = storedImages ? JSON.parse(storedImages) : [];
-        
         // Filtrer les images qui n'appartiennent pas à cette fiche
         const otherImages = allImages.filter(img => img.ficheId !== ficheId);
         
         // Fusionner avec les images mises à jour pour cette fiche
         const combinedImages = [...otherImages, ...updatedImages];
         localStorage.setItem('projectImages', JSON.stringify(combinedImages));
+        console.log(`Saved ${updatedImages.length} images for ficheId ${ficheId}`);
       } else {
         // Pas de ficheId, nous sauvegardons simplement toutes les images
         localStorage.setItem('projectImages', JSON.stringify(updatedImages));

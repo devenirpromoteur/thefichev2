@@ -26,6 +26,7 @@ import { ParkingSection } from '@/components/synthese/ParkingSection';
 import { CadastreTab } from '@/components/synthese/CadastreTab';
 import { ResidentsTab } from '@/components/synthese/ResidentsTab';
 import { ProjectTab } from '@/components/synthese/ProjectTab';
+import ImageGallery from '@/components/images/ImageGallery';
 
 interface Fiche {
   id: string;
@@ -560,11 +561,10 @@ export default function FicheDetails() {
           </TabsList>
           
           <TabsContent value="images" className="animate-enter opacity-0">
-            <Card className="p-6">
-              <div className="text-center p-10 border-2 border-dashed border-gray-200 rounded-lg">
-                <p className="text-gray-500 mb-2">Glissez et déposez vos images ici</p>
-                <Button>Télécharger des images</Button>
-              </div>
+            <Card>
+              <CardContent className="p-6">
+                <ImageGallery ficheId={ficheId} />
+              </CardContent>
             </Card>
           </TabsContent>
           

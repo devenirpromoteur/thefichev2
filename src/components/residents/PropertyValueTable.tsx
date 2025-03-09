@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
-import { Plus, Minus, Info } from 'lucide-react';
+import { Plus, Minus, Info, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
@@ -95,18 +95,11 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     setEntries(prev => [...prev, newEntry]);
   };
 
-  const handleDeleteEntry = () => {
-    if (!selectedRow) {
-      toast({
-        title: "Aucune ligne sélectionnée",
-        description: "Veuillez sélectionner une ligne à supprimer",
-        variant: "destructive",
-      });
-      return;
+  const handleDeleteEntry = (id: string) => {
+    setEntries(prev => prev.filter(entry => entry.id !== id));
+    if (selectedRow === id) {
+      setSelectedRow(null);
     }
-    
-    setEntries(prev => prev.filter(entry => entry.id !== selectedRow));
-    setSelectedRow(null);
     
     toast({
       title: "Ligne supprimée",
@@ -164,6 +157,19 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     }, 0);
   };
 
+  const getTotalEstimatedValue = (): number => {
+    return entries.reduce((total, entry) => total + entry.valeur, 0);
+  };
+
+  const getTotalDVFValue = (): number => {
+    return entries.reduce((total, entry) => {
+      if (entry.dvf !== '') {
+        return total + Number(entry.dvf);
+      }
+      return total;
+    }, 0);
+  };
+
   const handleCadastreSelect = (id: string, sectionId: string) => {
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (selectedCadastre) {
@@ -196,15 +202,6 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
           >
             <Plus className="h-4 w-4" /> Ajouter
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleDeleteEntry}
-            disabled={!selectedRow}
-            className="flex items-center gap-1 text-red-500 hover:text-red-600 disabled:text-gray-400"
-          >
-            <Minus className="h-4 w-4" /> Supprimer
-          </Button>
         </div>
       </div>
       
@@ -224,8 +221,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                         <Info className="h-4 w-4 ml-1 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="w-[200px] text-xs">
-                          Coefficient (0.8 à 1) permettant de moduler la surface ou le nombre d'unités
+                        <p className="w-[250px] text-xs">
+                          Coefficient d'abattement entre la surface brute et la surface réelle.
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -235,18 +232,6 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
               <TableHead className="min-w-[120px]">
                 <div className="flex items-center">
                   Estim'Prix M2
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-4 w-4 ml-1 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="w-[200px] text-xs">
-                          Prix unitaire (€/m²) ou valeur de référence pour le calcul
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
                 </div>
               </TableHead>
               <TableHead className="min-w-[100px]">
@@ -258,8 +243,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                         <Info className="h-4 w-4 ml-1 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="w-[200px] text-xs">
-                          Taux de capitalisation - S'applique uniquement aux types tertiaires (Non applicable aux logements)
+                        <p className="w-[250px] text-xs">
+                          Ratio de rentabilité (NOI / valeur du bien).
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -275,8 +260,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                         <Info className="h-4 w-4 ml-1 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="w-[200px] text-xs">
-                          Coefficient (0.7 à 1.25) reflétant l'état de conservation du bien
+                        <p className="w-[250px] text-xs">
+                          Coefficient reflétant l'état du bâtiment (de 0,7 à 1,25).
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -293,14 +278,15 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                         <Info className="h-4 w-4 ml-1 text-muted-foreground cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="w-[200px] text-xs">
-                          Données Valeurs Foncières - Si renseignée, cette valeur prime sur la valeur estimée calculée
+                        <p className="w-[250px] text-xs">
+                          Valeur(s) trouvée(s) sur Pappers Immo ou DVF.
                         </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 </div>
               </TableHead>
+              <TableHead className="min-w-[80px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -382,7 +368,6 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     min="0.01"
                     max="0.2"
                     step="0.01"
-                    disabled={entry.type === 'Logements'}
                   />
                 </TableCell>
                 <TableCell>
@@ -408,11 +393,36 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     min="0"
                   />
                 </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteEntry(entry.id);
+                    }}
+                    className="h-8 w-8 text-destructive hover:text-destructive/90"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
+            <TableRow className="bg-brand/5 font-bold">
+              <TableCell colSpan={7} className="text-right">Total Valeur(s) estimée(s)</TableCell>
+              <TableCell colSpan={3} className="text-brand">
+                {formatCurrency(getTotalEstimatedValue())}
+              </TableCell>
+            </TableRow>
+            <TableRow className="bg-brand/5 font-bold">
+              <TableCell colSpan={7} className="text-right">Total DVF</TableCell>
+              <TableCell colSpan={3} className="text-brand">
+                {formatCurrency(getTotalDVFValue())}
+              </TableCell>
+            </TableRow>
             <TableRow className="bg-brand/10 font-bold">
               <TableCell colSpan={7} className="text-right">TOTAL</TableCell>
-              <TableCell colSpan={2} className="text-brand">
+              <TableCell colSpan={3} className="text-brand">
                 {formatCurrency(getTotalValue())}
               </TableCell>
             </TableRow>

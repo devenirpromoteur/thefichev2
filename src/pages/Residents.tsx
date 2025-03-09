@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,9 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Trash2, Edit, Save, X, Users } from 'lucide-react';
+import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
+import { PropertyOwnersTable } from '@/components/residents/PropertyOwnersTable';
+import { useToast } from '@/hooks/use-toast';
 
 interface ResidentEntry {
   id: string;
@@ -45,6 +48,7 @@ const ownershipStatuses = [
 ];
 
 const Residents = () => {
+  const { toast } = useToast();
   const [entries, setEntries] = useState<ResidentEntry[]>([]);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [newEntry, setNewEntry] = useState<Omit<ResidentEntry, 'id'>>({
@@ -56,6 +60,29 @@ const Residents = () => {
     dateInstallation: '',
   });
   const [editedEntry, setEditedEntry] = useState<ResidentEntry | null>(null);
+  const [cadastreEntries, setCadastreEntries] = useState<Array<{
+    id: string;
+    section: string;
+    parcelle: string;
+  }>>([]);
+
+  // Load cadastre data on component mount
+  useEffect(() => {
+    // In a real app, this would be a call to your API
+    // Here we'll simulate loading from localStorage
+    const storedData = localStorage.getItem('cadastreEntries');
+    if (storedData) {
+      setCadastreEntries(JSON.parse(storedData));
+    } else {
+      // Provide some example data if none exists
+      const exampleData = [
+        { id: 'cad1', section: 'AB', parcelle: '123' },
+        { id: 'cad2', section: 'AC', parcelle: '456' }
+      ];
+      setCadastreEntries(exampleData);
+      localStorage.setItem('cadastreEntries', JSON.stringify(exampleData));
+    }
+  }, []);
 
   const handleAddEntry = () => {
     if (!newEntry.parcelle.trim() || !newEntry.typeOccupation) return;
@@ -108,6 +135,16 @@ const Residents = () => {
       ...editedEntry,
       [field]: value
     });
+  };
+
+  // Get current fiche ID from URL (e.g. "fiche/1741469320495" → "1741469320495")
+  const getFicheId = (): string | undefined => {
+    const pathParts = window.location.pathname.split('/');
+    const ficheIndex = pathParts.findIndex(part => part === 'fiche');
+    if (ficheIndex !== -1 && pathParts.length > ficheIndex + 1) {
+      return pathParts[ficheIndex + 1];
+    }
+    return undefined;
   };
 
   return (
@@ -367,6 +404,26 @@ const Residents = () => {
                   </TableBody>
                 </Table>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Property Value Table from existing component */}
+          <Card className="shadow-soft">
+            <CardContent className="pt-6">
+              <PropertyValueTable 
+                ficheId={getFicheId()} 
+                cadastreEntries={cadastreEntries}
+              />
+            </CardContent>
+          </Card>
+
+          {/* New Property Owners (Récapitulatif foncier) Table */}
+          <Card className="shadow-soft">
+            <CardContent className="pt-6">
+              <PropertyOwnersTable 
+                ficheId={getFicheId()} 
+                cadastreEntries={cadastreEntries}
+              />
             </CardContent>
           </Card>
         </div>

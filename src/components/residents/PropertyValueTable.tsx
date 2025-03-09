@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -46,6 +45,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
   const [entries, setEntries] = useState<PropertyEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
+  const [initialized, setInitialized] = useState(false);
 
   const propertyTypes = [
     "Logements",
@@ -57,113 +57,120 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     "Garages"
   ];
 
-  // Load saved property values or initialize with cadastre entries
+  // Load saved property values once on component mount
   useEffect(() => {
-    if (ficheId) {
+    if (ficheId && !initialized) {
       const storedData = localStorage.getItem(`propertyValues_${ficheId}`);
       if (storedData) {
-        setEntries(JSON.parse(storedData));
+        const parsedData = JSON.parse(storedData);
+        setEntries(parsedData);
+        setProcessedCadastreIds(parsedData.filter((entry: PropertyEntry) => entry.cadastreId).map((entry: PropertyEntry) => entry.cadastreId));
       }
+      setInitialized(true);
     }
-  }, [ficheId]);
+  }, [ficheId, initialized]);
 
-  // Track which cadastre entries have been processed
+  // Synchronize with cadastre entries only after initialization
   useEffect(() => {
-    if (entries.length > 0) {
-      setProcessedCadastreIds(entries.filter(entry => entry.cadastreId).map(entry => entry.cadastreId));
-    }
-  }, [entries]);
+    if (!initialized || !cadastreEntries.length || !ficheId) return;
 
-  // Synchronize with cadastre entries: add new entries from cadastre
-  useEffect(() => {
-    if (cadastreEntries.length > 0 && ficheId) {
-      // Find cadastre entries that don't have a corresponding property entry
-      const newCadastreEntries = cadastreEntries.filter(
-        cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
-      );
+    // Find cadastre entries that don't have a corresponding property entry
+    const newCadastreEntries = cadastreEntries.filter(
+      cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
+    );
 
-      if (newCadastreEntries.length > 0) {
-        const newPropertyEntries: PropertyEntry[] = newCadastreEntries.map(cadastreEntry => ({
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-          section: cadastreEntry.section || '',
-          parcelle: cadastreEntry.parcelle || '',
-          type: 'Logements',
-          surface: '',
-          abattement: 1,
-          prixM2: '',
-          tauxCap: 0.05,
-          etat: 1,
-          valeur: 0,
-          dvf: '',
-          cadastreId: cadastreEntry.id
-        }));
+    if (newCadastreEntries.length > 0) {
+      const newPropertyEntries: PropertyEntry[] = newCadastreEntries.map(cadastreEntry => ({
+        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+        section: cadastreEntry.section || '',
+        parcelle: cadastreEntry.parcelle || '',
+        type: 'Logements',
+        surface: '',
+        abattement: 1,
+        prixM2: '',
+        tauxCap: 0.05,
+        etat: 1,
+        valeur: 0,
+        dvf: '',
+        cadastreId: cadastreEntry.id
+      }));
 
-        setEntries(prev => [...prev, ...newPropertyEntries]);
-        
-        toast({
-          title: "Nouvelles parcelles ajoutées",
-          description: `${newPropertyEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
-        });
-      }
-
-      // Check for deleted cadastre entries and remove corresponding property entries
-      const existingCadastreIds = cadastreEntries.map(entry => entry.id);
-      const entriesWithDeletedCadastre = entries.filter(
-        entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
-      );
-
-      if (entriesWithDeletedCadastre.length > 0) {
-        setEntries(prev => prev.filter(entry => 
-          !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
-        ));
-        
-        toast({
-          title: "Parcelles supprimées",
-          description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
-        });
-      }
-
-      // Update section/parcelle info for existing entries if they changed in cadastre
-      let updatedEntries = false;
-      const newEntries = entries.map(entry => {
-        if (entry.cadastreId) {
-          const correspondingCadastreEntry = cadastreEntries.find(
-            cadastreEntry => cadastreEntry.id === entry.cadastreId
-          );
-          
-          if (correspondingCadastreEntry && 
-              (entry.section !== correspondingCadastreEntry.section || 
-               entry.parcelle !== correspondingCadastreEntry.parcelle)) {
-            updatedEntries = true;
-            return {
-              ...entry,
-              section: correspondingCadastreEntry.section,
-              parcelle: correspondingCadastreEntry.parcelle
-            };
-          }
-        }
-        return entry;
+      setEntries(prev => [...prev, ...newPropertyEntries]);
+      setProcessedCadastreIds(prev => [...prev, ...newCadastreEntries.map(entry => entry.id)]);
+      
+      toast({
+        title: "Nouvelles parcelles ajoutées",
+        description: `${newPropertyEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
       });
-
-      if (updatedEntries) {
-        setEntries(newEntries);
-        toast({
-          title: "Parcelles mises à jour",
-          description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
-        });
-      }
     }
-  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries]);
+
+    // Check for deleted cadastre entries and remove corresponding property entries
+    const existingCadastreIds = cadastreEntries.map(entry => entry.id);
+    const entriesWithDeletedCadastre = entries.filter(
+      entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
+    );
+
+    if (entriesWithDeletedCadastre.length > 0) {
+      setEntries(prev => prev.filter(entry => 
+        !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
+      ));
+      
+      // Update processedCadastreIds to remove deleted entries
+      setProcessedCadastreIds(prev => prev.filter(id => existingCadastreIds.includes(id)));
+      
+      toast({
+        title: "Parcelles supprimées",
+        description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
+      });
+    }
+
+    // Update section/parcelle info for existing entries if they changed in cadastre
+    let updatedEntries = false;
+    const newEntries = entries.map(entry => {
+      if (entry.cadastreId) {
+        const correspondingCadastreEntry = cadastreEntries.find(
+          cadastreEntry => cadastreEntry.id === entry.cadastreId
+        );
+        
+        if (correspondingCadastreEntry && 
+            (entry.section !== correspondingCadastreEntry.section || 
+             entry.parcelle !== correspondingCadastreEntry.parcelle)) {
+          updatedEntries = true;
+          return {
+            ...entry,
+            section: correspondingCadastreEntry.section,
+            parcelle: correspondingCadastreEntry.parcelle
+          };
+        }
+      }
+      return entry;
+    });
+
+    if (updatedEntries) {
+      setEntries(newEntries);
+      toast({
+        title: "Parcelles mises à jour",
+        description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
+      });
+    }
+  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
 
   // Save changes to localStorage
   useEffect(() => {
-    if (ficheId && entries.length > 0) {
+    if (ficheId && entries.length > 0 && initialized) {
       localStorage.setItem(`propertyValues_${ficheId}`, JSON.stringify(entries));
     }
-  }, [entries, ficheId]);
+  }, [entries, ficheId, initialized]);
 
   const handleAddEntry = () => {
-    const defaultCadastreEntry = cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' };
+    // Find a cadastre entry that hasn't been used yet
+    const unusedCadastreEntry = cadastreEntries.find(entry => 
+      !processedCadastreIds.includes(entry.id)
+    );
+    
+    // If no unused entry exists, use the first cadastre entry or create a blank one
+    const defaultCadastreEntry = unusedCadastreEntry || 
+      (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
     
     const newEntry: PropertyEntry = {
       id: Date.now().toString(),
@@ -181,9 +188,19 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     };
     
     setEntries(prev => [...prev, newEntry]);
+    
+    // If we used an unused cadastre entry, add it to processed ids
+    if (unusedCadastreEntry) {
+      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+    }
   };
 
   const handleDeleteEntry = (id: string) => {
+    const entryToDelete = entries.find(entry => entry.id === id);
+    if (entryToDelete && entryToDelete.cadastreId) {
+      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
+    }
+    
     setEntries(prev => prev.filter(entry => entry.id !== id));
     if (selectedRow === id) {
       setSelectedRow(null);
@@ -273,6 +290,10 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
   };
 
   const handleCadastreSelect = (id: string, sectionId: string) => {
+    // Find the current entry and its current cadastreId
+    const currentEntry = entries.find(entry => entry.id === id);
+    const oldCadastreId = currentEntry?.cadastreId;
+    
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (selectedCadastre) {
       setEntries(prev => prev.map(entry => 
@@ -283,6 +304,12 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
           cadastreId: selectedCadastre.id // Update the link to cadastre
         } : entry
       ));
+      
+      // Update processedCadastreIds to reflect the change
+      if (oldCadastreId) {
+        setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
+      }
+      setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
     }
   };
 

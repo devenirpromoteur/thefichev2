@@ -1,15 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart2, FileText, Image, Map, PlusSquare, Users } from 'lucide-react';
+import { ArrowRight, BarChart2, FileText, Image, Map, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserFicheList } from '@/components/fiches/UserFicheList';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
 
 const features = [
   {
@@ -55,79 +51,10 @@ const Index = () => {
   const featureRefs = useRef<(HTMLDivElement | null)[]>([]);
   
   const [showFeatures, setShowFeatures] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newFiche, setNewFiche] = useState({
-    address: '',
-    cadastreSection: '',
-    cadastreNumber: ''
-  });
-  
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const { toast } = useToast();
-  const navigate = useNavigate();
-  
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNewFiche(prev => ({ ...prev, [name]: value }));
-  };
   
   const toggleFeatures = () => {
-    if (isLoggedIn) {
-      setIsDialogOpen(true);
-    } else {
-      setShowFeatures(!showFeatures);
-    }
-  };
-  
-  const handleSubmitFiche = () => {
-    if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
-      toast({
-        title: "Champs incomplets",
-        description: "Veuillez remplir tous les champs",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    const newId = Date.now().toString();
-    const createdFiche = {
-      id: newId,
-      address: newFiche.address,
-      cadastreSection: newFiche.cadastreSection,
-      cadastreNumber: newFiche.cadastreNumber,
-      completion: 10,
-      lastUpdated: new Date().toISOString().split('T')[0],
-      cadastreEntries: [
-        {
-          id: Math.random().toString(36).substring(2, 9),
-          parcelle: newFiche.cadastreNumber,
-          adresse: newFiche.address,
-          section: newFiche.cadastreSection,
-          surface: '',
-        }
-      ],
-      cadastreCompletion: 25
-    };
-    
-    const storedFiches = localStorage.getItem('userFiches');
-    let fiches = storedFiches ? JSON.parse(storedFiches) : [];
-    fiches = [...fiches, createdFiche];
-    
-    localStorage.setItem('userFiches', JSON.stringify(fiches));
-    
-    setNewFiche({
-      address: '',
-      cadastreSection: '',
-      cadastreNumber: ''
-    });
-    setIsDialogOpen(false);
-    
-    toast({
-      title: "Fiche créée avec succès",
-      description: "La fiche a été ajoutée à votre liste avec le module Cadastre initialisé",
-    });
-    
-    navigate(`/fiche/${newId}`);
+    setShowFeatures(!showFeatures);
   };
   
   useEffect(() => {
@@ -199,23 +126,24 @@ const Index = () => {
             Optimisez vos projets immobiliers grâce à notre plateforme intuitive d'analyse et de gestion
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Button 
-              size="lg" 
-              className="bg-brand hover:bg-brand-dark flex items-center gap-2" 
-              onClick={toggleFeatures}
-            >
-              <PlusSquare className="h-5 w-5" />
-              Créer sa Fiche
-            </Button>
-            
             {!isLoggedIn && (
               <Link to="/register">
-                <Button variant="outline" size="lg">
+                <Button size="lg" className="bg-brand hover:bg-brand-dark">
                   Commencer gratuitement
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
             )}
+            
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={toggleFeatures}
+              className="border-brand text-brand hover:bg-brand hover:text-white"
+            >
+              Découvrir les modules
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
             
             <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
               {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
@@ -224,63 +152,6 @@ const Index = () => {
         </div>
       </section>
       
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Créer une nouvelle fiche parcelle</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="address-new" className="text-right">
-                Adresse
-              </Label>
-              <Input
-                id="address-new"
-                name="address"
-                value={newFiche.address}
-                onChange={handleInputChange}
-                className="col-span-3"
-                placeholder="15 rue de la Paix, 75001 Paris"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="cadastreSection-new" className="text-right">
-                Section
-              </Label>
-              <Input
-                id="cadastreSection-new"
-                name="cadastreSection"
-                value={newFiche.cadastreSection}
-                onChange={handleInputChange}
-                className="col-span-3"
-                placeholder="AB"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="cadastreNumber-new" className="text-right">
-                Numéro
-              </Label>
-              <Input
-                id="cadastreNumber-new"
-                name="cadastreNumber"
-                value={newFiche.cadastreNumber}
-                onChange={handleInputChange}
-                className="col-span-3"
-                placeholder="123"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              type="submit" 
-              className="bg-brand hover:bg-brand-dark" 
-              onClick={handleSubmitFiche}
-            >
-              Créer la fiche
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       
       {isLoggedIn && (
         <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">

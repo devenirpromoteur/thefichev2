@@ -12,6 +12,7 @@ import { TableActions } from '@/components/cadastre/TableActions';
 import { TotalSurface } from '@/components/cadastre/TotalSurface';
 import { ProjectConfigTable } from '@/components/projet/ProjectConfigTable';
 import { ServitudesMultiSelect } from '@/components/cadastre/ServitudesMultiSelect';
+import { ZoneSelect } from '@/components/cadastre/ZoneSelect';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { 
   Select,
@@ -600,21 +601,12 @@ export default function FicheDetails() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">Zone</label>
-                      <Select
+                      <label className="block text-sm font-medium mb-1 text-[#4F3CE7]">Zone</label>
+                      <ZoneSelect
                         value={fiche.zone}
                         onValueChange={(value) => handleSelectChange('zone', value)}
                         disabled={!isEditing}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Sélectionner une zone" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="UA">UA</SelectItem>
-                          <SelectItem value="UB">UB</SelectItem>
-                          <SelectItem value="UC">UC</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Emprise au sol max</label>

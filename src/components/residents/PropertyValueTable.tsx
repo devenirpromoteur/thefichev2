@@ -104,20 +104,28 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       }
 
       if (data) {
-        const mappedEntries: PropertyEntry[] = data.map(item => ({
-          id: item.id,
-          section: item.parcel_section || '',
-          parcelle: item.parcel_code || '',
-          type: getPropertyTypeLabel(item.type),
-          surface: item.surface_or_count || '',
-          abattement: item.abatt || 1,
-          prixM2: item.price_m2 || '',
-          tauxCap: item.tcap || 0.05,
-          etat: item.etat || 1,
-          valeur: 0, // Will be calculated
-          dvf: item.dvf || '',
-          cadastreId: '' // Will be mapped if needed
-        }));
+        const mappedEntries: PropertyEntry[] = data.map(item => {
+          // Find the corresponding cadastre entry
+          const correspondingCadastre = cadastreEntries.find(cadastre => 
+            cadastre.section === item.parcel_section && 
+            cadastre.parcelle === item.parcel_code
+          );
+
+          return {
+            id: item.id,
+            section: item.parcel_section || '',
+            parcelle: item.parcel_code || '',
+            type: getPropertyTypeLabel(item.type),
+            surface: item.surface_or_count || '',
+            abattement: item.abatt || 1,
+            prixM2: item.price_m2 || '',
+            tauxCap: item.tcap || 0.05,
+            etat: item.etat || 1,
+            valeur: 0, // Will be calculated
+            dvf: item.dvf || '',
+            cadastreId: correspondingCadastre?.id || '' // Map back to cadastre ID
+          };
+        });
 
         // Calculate values for all entries
         const entriesWithValues = mappedEntries.map(entry => ({
@@ -126,6 +134,12 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
         }));
 
         setEntries(entriesWithValues);
+        
+        // Update processedCadastreIds based on loaded data
+        const usedCadastreIds = entriesWithValues
+          .map(entry => entry.cadastreId)
+          .filter(id => id !== '');
+        setProcessedCadastreIds(usedCadastreIds);
       }
     } catch (error) {
       console.error('Error in loadExistingValues:', error);
@@ -137,14 +151,31 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [projectId, toast]);
+  }, [projectId, toast, cadastreEntries]);
 
-  // Load data on mount
+  // Load data on mount and when cadastre entries change
   useEffect(() => {
-    if (projectId) {
+    if (projectId && cadastreEntries.length > 0) {
       loadExistingValues();
     }
-  }, [projectId, loadExistingValues]);
+  }, [projectId, loadExistingValues, cadastreEntries]);
+
+  // Re-map cadastre IDs when cadastre entries change (for existing data)
+  useEffect(() => {
+    if (cadastreEntries.length > 0 && entries.length > 0) {
+      setEntries(prevEntries => prevEntries.map(entry => {
+        const correspondingCadastre = cadastreEntries.find(cadastre => 
+          cadastre.section === entry.section && 
+          cadastre.parcelle === entry.parcelle
+        );
+        
+        return {
+          ...entry,
+          cadastreId: correspondingCadastre?.id || ''
+        };
+      }));
+    }
+  }, [cadastreEntries]);
 
   // Create new entry in database
   const createEntry = async (newEntryData: Omit<PropertyEntry, 'id' | 'valeur'>) => {

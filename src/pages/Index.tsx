@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BarChart2, FileText, Image, Map, PlusSquare, Users, Loader2 } from 'lucide-react';
+import { ArrowRight, BarChart2, FileText, Image, Map, PlusSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserFicheList } from '@/components/fiches/UserFicheList';
@@ -10,8 +10,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 
 const features = [
   {
@@ -59,14 +57,12 @@ const Index = () => {
   const [showFeatures, setShowFeatures] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newFiche, setNewFiche] = useState({
-    name: '',
     address: '',
     cadastreSection: '',
     cadastreNumber: ''
   });
-  const [isCreating, setIsCreating] = useState(false);
   
-  const { user, loading } = useAuth();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -76,16 +72,15 @@ const Index = () => {
   };
   
   const toggleFeatures = () => {
-    if (user) {
+    if (isLoggedIn) {
       setIsDialogOpen(true);
     } else {
       setShowFeatures(!showFeatures);
     }
   };
   
-  const createFiche = async () => {
-    // Validation
-    if (!newFiche.name || !newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
+  const handleSubmitFiche = () => {
+    if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
       toast({
         title: "Champs incomplets",
         description: "Veuillez remplir tous les champs",
@@ -93,88 +88,65 @@ const Index = () => {
       });
       return;
     }
-
-    if (!user) {
-      toast({
-        title: "Non connecté",
-        description: "Vous devez être connecté pour créer une fiche",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Anti-double-clic
-    if (isCreating) return;
     
-    try {
-      setIsCreating(true);
-      
-      // Création du projet avec description basée sur les données cadastrales
-      const description = `Projet immobilier situé à ${newFiche.address}, section cadastrale ${newFiche.cadastreSection}, parcelle ${newFiche.cadastreNumber}`;
-      
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          name: newFiche.name,
-          description,
-          owner_id: user.id,
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        console.error('Erreur création projet:', error);
-        
-        // Gestion d'erreurs spécifiques
-        let errorMessage = "Une erreur est survenue lors de la création";
-        
-        if (error.code === '42501') {
-          errorMessage = "Permissions insuffisantes. Vérifiez que vous êtes bien connecté.";
-        } else if (error.code === '23502') {
-          errorMessage = "Données manquantes. Vérifiez que tous les champs sont remplis.";
-        } else if (error.code === '23503') {
-          errorMessage = "Référence utilisateur invalide. Reconnectez-vous.";
-        } else if (error.message.includes('network')) {
-          errorMessage = "Problème de réseau. Vérifiez votre connexion.";
+    const newId = Date.now().toString();
+    const createdFiche = {
+      id: newId,
+      address: newFiche.address,
+      cadastreSection: newFiche.cadastreSection,
+      cadastreNumber: newFiche.cadastreNumber,
+      completion: 10,
+      lastUpdated: new Date().toISOString().split('T')[0],
+      cadastreEntries: [
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          parcelle: newFiche.cadastreNumber,
+          adresse: newFiche.address,
+          section: newFiche.cadastreSection,
+          surface: '',
         }
-
-        toast({
-          title: "Erreur de création",
-          description: `${errorMessage} (Code: ${error.code || 'UNKNOWN'})`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Reset du formulaire et fermeture du dialog
-      setNewFiche({
-        name: '',
-        address: '',
-        cadastreSection: '',
-        cadastreNumber: ''
-      });
-      setIsDialogOpen(false);
-      
-      toast({
-        title: "Fiche créée avec succès",
-        description: `Le projet "${newFiche.name}" a été créé et ajouté à votre liste`,
-      });
-      
-      // Redirection vers la page du projet
-      navigate(`/projets/${data.id}`);
-      
-    } catch (error) {
-      console.error('Erreur inattendue:', error);
-      toast({
-        title: "Erreur inattendue",
-        description: "Une erreur technique est survenue. Réessayez plus tard.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreating(false);
-    }
+      ],
+      cadastreCompletion: 25
+    };
+    
+    const storedFiches = localStorage.getItem('userFiches');
+    let fiches = storedFiches ? JSON.parse(storedFiches) : [];
+    fiches = [...fiches, createdFiche];
+    
+    localStorage.setItem('userFiches', JSON.stringify(fiches));
+    
+    setNewFiche({
+      address: '',
+      cadastreSection: '',
+      cadastreNumber: ''
+    });
+    setIsDialogOpen(false);
+    
+    toast({
+      title: "Fiche créée avec succès",
+      description: "La fiche a été ajoutée à votre liste avec le module Cadastre initialisé",
+    });
+    
+    navigate(`/fiche/${newId}`);
   };
   
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      const mockLoggedIn = localStorage.getItem('mockUserLoggedIn') === 'true';
+      setIsLoggedIn(mockLoggedIn);
+    };
+    
+    checkLoginStatus();
+    
+    const loginToggleBtn = document.getElementById('mock-login-toggle');
+    if (loginToggleBtn) {
+      loginToggleBtn.addEventListener('click', () => {
+        const currentState = localStorage.getItem('mockUserLoggedIn') === 'true';
+        localStorage.setItem('mockUserLoggedIn', (!currentState).toString());
+        setIsLoggedIn(!currentState);
+      });
+    }
+  }, []);
   
   useEffect(() => {
     const observerOptions = {
@@ -236,14 +208,18 @@ const Index = () => {
               Créer sa Fiche
             </Button>
             
-            {!user && (
-              <Link to="/signup">
+            {!isLoggedIn && (
+              <Link to="/register">
                 <Button variant="outline" size="lg">
                   Commencer gratuitement
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
             )}
+            
+            <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
+              {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
+            </Button>
           </div>
         </div>
       </section>
@@ -255,20 +231,6 @@ const Index = () => {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="name-new" className="text-right">
-                Nom du projet
-              </Label>
-              <Input
-                id="name-new"
-                name="name"
-                value={newFiche.name}
-                onChange={handleInputChange}
-                className="col-span-3"
-                placeholder="Mon projet immobilier"
-                disabled={isCreating}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="address-new" className="text-right">
                 Adresse
               </Label>
@@ -279,7 +241,6 @@ const Index = () => {
                 onChange={handleInputChange}
                 className="col-span-3"
                 placeholder="15 rue de la Paix, 75001 Paris"
-                disabled={isCreating}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -293,7 +254,6 @@ const Index = () => {
                 onChange={handleInputChange}
                 className="col-span-3"
                 placeholder="AB"
-                disabled={isCreating}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
@@ -307,7 +267,6 @@ const Index = () => {
                 onChange={handleInputChange}
                 className="col-span-3"
                 placeholder="123"
-                disabled={isCreating}
               />
             </div>
           </div>
@@ -315,31 +274,20 @@ const Index = () => {
             <Button 
               type="submit" 
               className="bg-brand hover:bg-brand-dark" 
-              onClick={createFiche}
-              disabled={isCreating}
+              onClick={handleSubmitFiche}
             >
-              {isCreating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Création...
-                </>
-              ) : (
-                <>
-                  <PlusSquare className="mr-2 h-4 w-4" />
-                  Créer la fiche
-                </>
-              )}
+              Créer la fiche
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       
-      {user && (
+      {isLoggedIn && (
         <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">
           <div className="text-center mb-10">
-            <h2 className="text-3xl font-bold mb-4">Mes Projets</h2>
+            <h2 className="text-3xl font-bold mb-4">Mes Fiches Parcelles</h2>
             <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Retrouvez ici tous vos projets immobiliers
+              Retrouvez ici toutes vos fiches de projets immobiliers
             </p>
           </div>
           
@@ -396,7 +344,7 @@ const Index = () => {
               Rejoignez notre plateforme et bénéficiez d'une suite complète d'outils analytiques.
             </p>
           </div>
-          <Link to="/signup">
+          <Link to="/register">
             <Button size="lg" variant="secondary" className="font-medium text-brand">
               Créer un compte gratuitement
             </Button>

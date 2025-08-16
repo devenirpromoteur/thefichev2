@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      cadastre_servitudes: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          present: boolean
+          project_id: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          present?: boolean
+          project_id: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          present?: boolean
+          project_id?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

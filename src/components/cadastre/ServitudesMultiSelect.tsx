@@ -33,77 +33,77 @@ const DEFAULT_OPTIONS = [
 
 const SERVITUDES_OPTIONS = [
   { 
-    value: 'papag', 
+    type_key: 'papag', 
     label: 'PAPAG',
     description: 'Périmètres d\'Aménagement Programmé',
     requiresNote: false
   },
   { 
-    value: 'monuments_abf', 
+    type_key: 'monuments_abf', 
     label: 'Monuments/ABF',
     description: 'Monuments Historiques et Architecte des Bâtiments de France',
     requiresNote: false,
     isAlert: true
   },
   { 
-    value: 'protection_vegetale', 
+    type_key: 'protection_vegetale', 
     label: 'Protection végétale (EBC…)',
     description: 'Espaces Boisés Classés et autres protections végétales',
     requiresNote: false
   },
   { 
-    value: 'emplacements_reserves', 
+    type_key: 'emplacements_reserves', 
     label: 'Emplacements réservés',
     description: 'Emplacements réservés aux voies et ouvrages publics',
     requiresNote: true,
     placeholder: 'Ex: ER 1, ER 15...'
   },
   { 
-    value: 'voies_emprises', 
+    type_key: 'voies_emprises', 
     label: 'Voies & emprises publiques',
     description: 'Servitudes de voies et d\'emprises publiques',
     requiresNote: false
   },
   { 
-    value: 'mixite_sociale', 
+    type_key: 'mixite_sociale', 
     label: 'Mixité sociale',
     description: 'Obligations de mixité sociale',
     requiresNote: false
   },
   { 
-    value: 'non_aedificandi', 
+    type_key: 'non_aedificandi', 
     label: 'Non aedificandi',
     description: 'Interdiction de construire',
     requiresNote: false,
     isAlert: true
   },
   { 
-    value: 'ligne_marge_recul', 
+    type_key: 'ligne_marge_recul', 
     label: 'Ligne/marge de recul',
     description: 'Lignes et marges de recul obligatoires',
     requiresNote: true,
     placeholder: 'Ex: 5 m, 10 m...'
   },
   { 
-    value: 'continuite_discontinuite', 
+    type_key: 'continuite_discontinuite', 
     label: 'Continuité/discontinuité',
     description: 'Obligations de continuité ou discontinuité urbaine',
     requiresNote: false
   },
   { 
-    value: 'polygone_implantation', 
+    type_key: 'polygone_implantation', 
     label: 'Polygone d\'implantation',
     description: 'Polygones d\'implantation obligatoire',
     requiresNote: false
   },
   { 
-    value: 'passage', 
+    type_key: 'passage', 
     label: 'Passage',
     description: 'Servitudes de passage',
     requiresNote: false
   },
   { 
-    value: 'risques_naturels', 
+    type_key: 'risques_naturels', 
     label: 'Risques naturels (PPRN/PPRI/PPRT/PPRM)',
     description: 'Plans de Prévention des Risques',
     requiresNote: false,
@@ -117,7 +117,7 @@ interface ServitudesMultiSelectProps {
 }
 
 interface ServitudeData {
-  type: string;
+  type_key: string;
   present: boolean;
   notes?: string;
 }
@@ -133,8 +133,8 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   disabled = false
 }) => {
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [notesByType, setNotesByType] = useState<Record<string, string>>({});
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [notesByKey, setNotesByKey] = useState<Record<string, string>>({});
   const [customServitude, setCustomServitude] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -154,7 +154,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
 
       const { data, error } = await supabase
         .from('cadastre_servitudes')
-        .select('type, present, notes')
+        .select('type_key, present, notes')
         .eq('project_id', projectId)
         .eq('present', true);
 
@@ -172,44 +172,57 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
 
   // Optimistic mutation for servitude selection
   const servitudeMutation = useMutation({
-    mutationFn: async ({ type, present }: { type: string; present: boolean }) => {
+    mutationFn: async ({ type_key, present }: { type_key: string; present: boolean }) => {
       if (!isValidUUID(projectId)) return;
       
-      if (present) {
-        const notes = notesByType[type];
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .upsert({
-            project_id: projectId,
-            type,
-            present: true,
-            notes: notes?.trim() || null
-          }, { onConflict: 'project_id,type' });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .delete()
-          .eq('project_id', projectId)
-          .eq('type', type);
-        if (error) throw error;
+      try {
+        if (present) {
+          const notes = notesByKey[type_key];
+          const { error } = await supabase
+            .from('cadastre_servitudes')
+            .upsert({
+              project_id: projectId,
+              type_key,
+              type: type_key, // Keep type for backward compatibility
+              present: true,
+              notes: notes?.trim() || null
+            }, { onConflict: 'project_id,type_key' })
+            .throwOnError();
+        } else {
+          const { error } = await supabase
+            .from('cadastre_servitudes')
+            .delete()
+            .eq('project_id', projectId)
+            .eq('type_key', type_key)
+            .throwOnError();
+        }
+      } catch (error: any) {
+        console.error('Servitude mutation error:', { code: error.code, message: error.message });
+        throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plu-servitudes', projectId] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erreur de sauvegarde",
+        description: `Impossible de sauvegarder la servitude: ${error.message}`,
+        variant: "destructive",
+      });
     }
   });
 
   // Update local state when data changes
   useEffect(() => {
-    const selectedTypes = servitudesData.map(item => item.type);
+    const selectedTypeKeys = new Set(servitudesData.map(item => item.type_key));
     const notes = servitudesData.reduce((acc, item) => {
-      if (item.notes) acc[item.type] = item.notes;
+      if (item.notes) acc[item.type_key] = item.notes;
       return acc;
     }, {} as Record<string, string>);
 
-    setSelected(selectedTypes);
-    setNotesByType(notes);
+    setSelectedKeys(selectedTypeKeys);
+    setNotesByKey(notes);
   }, [servitudesData]);
 
 
@@ -217,65 +230,76 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     setOpen(newOpen);
   };
 
-  const handleSelect = (value: string) => {
-    const isCurrentlySelected = selected.includes(value);
-    const newSelected = isCurrentlySelected 
-      ? selected.filter(item => item !== value)
-      : [...selected, value];
+  const toggleServitude = (type_key: string) => {
+    const isCurrentlySelected = selectedKeys.has(type_key);
+    const newSelectedKeys = new Set(selectedKeys);
     
-    setSelected(newSelected);
+    if (isCurrentlySelected) {
+      newSelectedKeys.delete(type_key);
+    } else {
+      newSelectedKeys.add(type_key);
+    }
+    
+    setSelectedKeys(newSelectedKeys);
     
     // Optimistic update
     servitudeMutation.mutate({
-      type: value,
+      type_key,
       present: !isCurrentlySelected
     });
   };
 
-  const handleNoteChange = (type: string, note: string) => {
-    setNotesByType(prev => ({
+  const handleNoteChange = (type_key: string, note: string) => {
+    setNotesByKey(prev => ({
       ...prev,
-      [type]: note
+      [type_key]: note
     }));
   };
 
   const handleSelectAll = () => {
-    const allValues = availableOptions.slice(0, -1); // Exclude "Autre…"
-    setSelected(allValues);
+    const allKeys = SERVITUDES_OPTIONS.map(opt => opt.type_key);
+    const newSelectedKeys = new Set(allKeys);
+    setSelectedKeys(newSelectedKeys);
     // Batch optimistic updates
-    allValues.forEach(value => {
-      if (!selected.includes(value)) {
-        servitudeMutation.mutate({ type: value, present: true });
+    allKeys.forEach(type_key => {
+      if (!selectedKeys.has(type_key)) {
+        servitudeMutation.mutate({ type_key, present: true });
       }
     });
   };
 
   const handleClearAll = () => {
-    const toRemove = [...selected];
-    setSelected([]);
-    setNotesByType({});
+    const toRemove = Array.from(selectedKeys);
+    setSelectedKeys(new Set());
+    setNotesByKey({});
     // Batch optimistic updates
-    toRemove.forEach(value => {
-      servitudeMutation.mutate({ type: value, present: false });
+    toRemove.forEach(type_key => {
+      servitudeMutation.mutate({ type_key, present: false });
     });
   };
 
   const handleAddCustom = () => {
-    if (customServitude.trim() && !selected.includes(customServitude.trim())) {
-      setSelected(prev => [...prev, customServitude.trim()]);
+    if (customServitude.trim()) {
+      const type_key = customServitude.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const newSelectedKeys = new Set(selectedKeys);
+      newSelectedKeys.add(type_key);
+      setSelectedKeys(newSelectedKeys);
       setCustomServitude('');
       setIsAddingCustom(false);
+      servitudeMutation.mutate({ type_key, present: true });
     }
   };
 
-  const handleRemoveServitude = (value: string) => {
-    setSelected(prev => prev.filter(item => item !== value));
-    setNotesByType(prev => {
-      const { [value]: _, ...rest } = prev;
+  const handleRemoveServitude = (type_key: string) => {
+    const newSelectedKeys = new Set(selectedKeys);
+    newSelectedKeys.delete(type_key);
+    setSelectedKeys(newSelectedKeys);
+    setNotesByKey(prev => {
+      const { [type_key]: _, ...rest } = prev;
       return rest;
     });
     // Optimistic update
-    servitudeMutation.mutate({ type: value, present: false });
+    servitudeMutation.mutate({ type_key, present: false });
   };
 
   return (
@@ -306,9 +330,9 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
             disabled={disabled || isSaving}
           >
             <span className="truncate">
-              {selected.length === 0 
+              {selectedKeys.size === 0 
                 ? "Sélectionner les servitudes" 
-                : `Servitudes (${selected.length} sélectionnées)`
+                : `Servitudes (${selectedKeys.size} sélectionnées)`
               }
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -346,57 +370,51 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                 </Button>
               </div>
               <span className="text-xs text-muted-foreground">
-                {selected.length}/20
+                {selectedKeys.size}/20
               </span>
             </div>
 
             <CommandList className="max-h-[300px]">
               <CommandEmpty>Aucune servitude trouvée.</CommandEmpty>
               
-              {availableOptions.slice(0, -1).map((optionLabel) => {
-                const option = SERVITUDES_OPTIONS.find(opt => opt.label === optionLabel) || { 
-                  value: optionLabel.toLowerCase().replace(/[^a-z0-9]/g, '_'), 
-                  label: optionLabel,
-                  description: '',
-                  requiresNote: false,
-                  isAlert: false
-                };
-                return (
-                  <CommandItem
-                    key={option.value}
-                    value={option.value}
-                    onSelect={() => handleSelect(option.value)}
-                    className="flex items-start gap-2 p-3"
-                  >
-                    <Checkbox
-                      checked={selected.includes(option.value)}
-                      onChange={() => handleSelect(option.value)}
-                    />
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{option.label}</span>
-                        {option.isAlert && (
-                          <AlertTriangle className="w-4 h-4 text-amber-500" />
-                        )}
-                      </div>
-                      {option.description && (
-                        <p className="text-xs text-muted-foreground">
-                          {option.description}
-                        </p>
-                      )}
-                      {selected.includes(option.value) && option.requiresNote && (
-                        <Input
-                          placeholder={option.placeholder || ''}
-                          value={notesByType[option.value] || ''}
-                          onChange={(e) => handleNoteChange(option.value, e.target.value)}
-                          className="h-7 text-xs mt-2"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+              {SERVITUDES_OPTIONS.map((option) => (
+                <CommandItem
+                  key={option.type_key}
+                  value={option.type_key}
+                  onSelect={() => {
+                    // Don't auto-close popover, let user continue selecting
+                  }}
+                  className="flex items-start gap-2 p-3"
+                >
+                  <Checkbox
+                    checked={selectedKeys.has(option.type_key)}
+                    onCheckedChange={() => toggleServitude(option.type_key)}
+                    onPointerDown={(e) => e.preventDefault()}
+                  />
+                  <div className="flex-1 space-y-1" onClick={() => toggleServitude(option.type_key)}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{option.label}</span>
+                      {option.isAlert && (
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
                       )}
                     </div>
-                  </CommandItem>
-                );
-              })}
+                    {option.description && (
+                      <p className="text-xs text-muted-foreground">
+                        {option.description}
+                      </p>
+                    )}
+                    {selectedKeys.has(option.type_key) && option.requiresNote && (
+                      <Input
+                        placeholder={option.placeholder || ''}
+                        value={notesByKey[option.type_key] || ''}
+                        onChange={(e) => handleNoteChange(option.type_key, e.target.value)}
+                        className="h-7 text-xs mt-2"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
 
               <div className="border-t p-2">
                 {isAddingCustom ? (
@@ -453,25 +471,29 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       </Popover>
 
       {/* Selected servitudes as chips */}
-      {selected.length > 0 && (
+      {selectedKeys.size > 0 && (
         <div className="flex flex-wrap gap-1 p-2 bg-muted/30 rounded-md">
-          {selected.map((value) => (
-            <Badge
-              key={value}
-              variant="secondary"
-              className="text-xs flex items-center gap-1"
-            >
-              {value}
-              {!disabled && (
-                <button
-                  onClick={() => handleRemoveServitude(value)}
-                  className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                >
-                  <X className="w-2 h-2" />
-                </button>
-              )}
-            </Badge>
-          ))}
+          {Array.from(selectedKeys).map((type_key) => {
+            const option = SERVITUDES_OPTIONS.find(opt => opt.type_key === type_key);
+            const label = option?.label || type_key;
+            return (
+              <Badge
+                key={type_key}
+                variant="secondary"
+                className="text-xs flex items-center gap-1"
+              >
+                {label}
+                {!disabled && (
+                  <button
+                    onClick={() => handleRemoveServitude(type_key)}
+                    className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                  >
+                    <X className="w-2 h-2" />
+                  </button>
+                )}
+              </Badge>
+            );
+          })}
         </div>
       )}
     </div>

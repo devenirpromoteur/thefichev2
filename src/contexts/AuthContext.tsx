@@ -21,6 +21,7 @@ interface AuthContextType {
   signOut: () => Promise<{ error: any }>;
   resetPassword: (email: string) => Promise<{ error: any }>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: any }>;
+  resendConfirmation: (email: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/auth/callback`;
     
     const { error } = await supabase.auth.signUp({
       email,
@@ -101,7 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       toast({
         title: "Erreur d'inscription",
-        description: error.message,
+        description: error.code === 'user_already_registered' 
+          ? "Un compte avec cet email existe déjà"
+          : error.message,
         variant: "destructive",
       });
     } else {
@@ -121,9 +124,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (error) {
+      let description = error.message;
+      if (error.code === 'email_not_confirmed') {
+        description = "Votre email n'a pas encore été confirmé. Vérifiez votre boîte mail.";
+      } else if (error.code === 'invalid_credentials') {
+        description = "Email ou mot de passe incorrect";
+      } else if (error.code === 'too_many_requests') {
+        description = "Trop de tentatives de connexion. Réessayez plus tard.";
+      }
+      
       toast({
         title: "Erreur de connexion",
-        description: error.message,
+        description,
         variant: "destructive",
       });
     } else {
@@ -151,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const redirectUrl = `${window.location.origin}/reset-password`;
+    const redirectUrl = `${window.location.origin}/auth/callback`;
     
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: redirectUrl,
@@ -167,6 +179,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast({
         title: "Email envoyé",
         description: "Vérifiez votre email pour réinitialiser votre mot de passe",
+      });
+    }
+
+    return { error };
+  };
+
+  const resendConfirmation = async (email: string) => {
+    const redirectUrl = `${window.location.origin}/auth/callback`;
+    
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: redirectUrl
+      }
+    });
+
+    if (error) {
+      toast({
+        title: "Erreur",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Email renvoyé",
+        description: "Un nouvel email de confirmation a été envoyé",
       });
     }
 
@@ -209,6 +248,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     resetPassword,
     updateProfile,
+    resendConfirmation,
   };
 
   return (

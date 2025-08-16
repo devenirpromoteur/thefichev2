@@ -8,15 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Eye, EyeOff, Mail, Lock, Github } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Github, RotateCcw } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { signInSchema, type SignInFormData } from '@/lib/validations/auth';
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
+  const [showResendButton, setShowResendButton] = useState(false);
+  const [lastEmail, setLastEmail] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, user } = useAuth();
+  const { signIn, user, resendConfirmation } = useAuth();
 
   const form = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
@@ -35,11 +37,22 @@ const Login = () => {
   }, [user, navigate, location]);
 
   const onSubmit = async (data: SignInFormData) => {
+    setLastEmail(data.email);
     const { error } = await signIn(data.email, data.password);
     
     if (!error) {
-      const from = location.state?.from?.pathname || '/';
+      const from = location.state?.from?.pathname || '/projets';
       navigate(from, { replace: true });
+    } else if (error.code === 'email_not_confirmed') {
+      setShowResendButton(true);
+    } else {
+      setShowResendButton(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (lastEmail) {
+      await resendConfirmation(lastEmail);
     }
   };
 
@@ -119,6 +132,18 @@ const Login = () => {
                 >
                   {form.formState.isSubmitting ? "Connexion en cours..." : "Se connecter"}
                 </Button>
+                
+                {showResendButton && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleResendConfirmation}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Renvoyer l'email de confirmation
+                  </Button>
+                )}
                 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">

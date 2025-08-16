@@ -115,32 +115,30 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   const [customServitude, setCustomServitude] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [validProject, setValidProject] = useState(false);
   const { toast } = useToast();
 
-  // Load existing servitudes
+  // Validate projectId once at mount
   useEffect(() => {
-    loadServitudes();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    setValidProject(uuidRegex.test(projectId));
+    if (uuidRegex.test(projectId)) {
+      loadServitudes();
+    } else {
+      console.error('Invalid projectId format:', projectId);
+      setLoading(false);
+    }
   }, [projectId]);
 
   const loadServitudes = async () => {
     try {
       setLoading(true);
-      
-      // Validate projectId is a valid UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(projectId)) {
-        console.error('Invalid projectId format:', projectId);
-        setLoading(false);
-        return;
-      }
 
       const { data, error } = await (supabase as any)
         .from('plu_servitudes')
         .select('type_key, notes')
-        .eq('project_id', projectId);
-
-      if (error) throw error;
+        .eq('project_id', projectId)
+        .throwOnError();
 
       const selectedTypes = data?.map(item => item.type_key) || [];
       const notes = data?.reduce((acc, item) => {
@@ -163,19 +161,12 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const saveServitude = async (typeKey: string, isSelected: boolean) => {
-    // Validate projectId is a valid UUID
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(projectId)) {
-      console.error('Invalid projectId format:', projectId);
-      throw new Error('ID de projet invalide');
-    }
-
+    const notes = notesByType[typeKey]?.trim() || null;
+    
     if (isSelected) {
       // Validate required notes
       const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === typeKey);
-      const notes = notesByType[typeKey];
-      
-      if (servitudeOption?.requiresNote && !notes?.trim()) {
+      if (servitudeOption?.requiresNote && !notes) {
         throw new Error(`Veuillez renseigner une valeur pour "${servitudeOption.label}"`);
       }
 
@@ -184,17 +175,18 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
         .upsert({
           project_id: projectId,
           type_key: typeKey,
-          notes: notes?.trim() || null
+          notes
         }, { 
           onConflict: 'project_id,type_key' 
         })
-        .select('id').single();
+        .throwOnError();
     } else {
       await (supabase as any)
         .from('plu_servitudes')
         .delete()
         .eq('project_id', projectId)
-        .eq('type_key', typeKey);
+        .eq('type_key', typeKey)
+        .throwOnError();
     }
   };
 
@@ -209,14 +201,15 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       console.error('Error toggling servitude:', error);
       setSelected(prev => willSelect ? prev.filter(x => x !== key) : [...prev, key]);
       
-      // Only toast user-facing validation errors
-      if (error instanceof Error && error.message !== 'ID de projet invalide') {
+      // Toast user-facing errors
+      if (error instanceof Error) {
         toast({
           title: "Erreur",
           description: error.message,
           variant: "destructive",
         });
       }
+      throw error;
     }
   };
 
@@ -226,7 +219,6 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
 
   const handleSelect = (value: string) => {
     toggle(value, !selected.includes(value));
-    setOpen(true);
   };
 
   const handleNoteChange = (type: string, note: string) => {
@@ -240,40 +232,42 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     const allValues = SERVITUDES_OPTIONS.map(opt => opt.value);
     const toAdd = allValues.filter(v => !selected.includes(v));
     
-    if (toAdd.length) {
-      // Optimistic update
-      setSelected(allValues);
-      
-      try {
-        await (supabase as any)
-          .from('plu_servitudes')
-          .upsert(
-            toAdd.map(v => ({ 
-              project_id: projectId, 
-              type_key: v, 
-              notes: notesByType[v]?.trim() || null 
-            })),
-            { onConflict: 'project_id,type_key' }
-          );
-      } catch (error) {
-        console.error('Error selecting all servitudes:', error);
-        // Rollback on error
-        setSelected(prev => prev.filter(v => !toAdd.includes(v)));
-        toast({
-          title: "Erreur",
-          description: "Impossible de sélectionner toutes les servitudes",
-          variant: "destructive",
-        });
-      }
+    if (!toAdd.length) return;
+    
+    // Optimistic update
+    setSelected(allValues);
+    
+    try {
+      await (supabase as any)
+        .from('plu_servitudes')
+        .upsert(
+          toAdd.map(v => ({ 
+            project_id: projectId, 
+            type_key: v, 
+            notes: notesByType[v]?.trim() || null 
+          })),
+          { onConflict: 'project_id,type_key' }
+        )
+        .throwOnError();
+    } catch (error) {
+      console.error('Error selecting all servitudes:', error);
+      // Rollback on error
+      setSelected(prev => prev.filter(v => !toAdd.includes(v)));
+      toast({
+        title: "Erreur",
+        description: "Impossible de sélectionner toutes les servitudes",
+        variant: "destructive",
+      });
     }
   };
 
   const handleClearAll = async () => {
     if (selected.length === 0) return;
     
+    const prevSelected = [...selected];
+    const prevNotes = { ...notesByType };
+    
     // Optimistic update
-    const previousSelected = [...selected];
-    const previousNotes = { ...notesByType };
     setSelected([]);
     setNotesByType({});
     
@@ -281,12 +275,13 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       await (supabase as any)
         .from('plu_servitudes')
         .delete()
-        .eq('project_id', projectId);
+        .eq('project_id', projectId)
+        .throwOnError();
     } catch (error) {
       console.error('Error clearing all servitudes:', error);
       // Rollback on error
-      setSelected(previousSelected);
-      setNotesByType(previousNotes);
+      setSelected(prevSelected);
+      setNotesByType(prevNotes);
       toast({
         title: "Erreur",
         description: "Impossible d'effacer les servitudes",
@@ -295,11 +290,17 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     }
   };
 
-  const handleAddCustom = () => {
-    if (customServitude.trim() && !selected.includes(customServitude.trim())) {
-      setSelected(prev => [...prev, customServitude.trim()]);
+  const handleAddCustom = async () => {
+    const key = customServitude.trim();
+    if (!key || selected.includes(key)) return;
+    
+    try {
+      await saveServitude(key, true);
+      setSelected(prev => [...prev, key]);
       setCustomServitude('');
       setIsAddingCustom(false);
+    } catch (error) {
+      // Error already handled in toggle function
     }
   };
 
@@ -321,6 +322,17 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       <div className="space-y-2">
         <label className="block text-sm font-medium mb-1">Servitudes</label>
         <div className="h-10 bg-muted animate-pulse rounded-md"></div>
+      </div>
+    );
+  }
+
+  if (!validProject) {
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-medium mb-1">Servitudes</label>
+        <div className="h-10 bg-muted/50 rounded-md flex items-center px-3 text-sm text-muted-foreground">
+          Projet invalide
+        </div>
       </div>
     );
   }
@@ -362,7 +374,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
           </Button>
         </PopoverTrigger>
         
-        <PopoverContent className="w-[400px] p-0" align="start">
+        <PopoverContent className="w-[400px] p-0" align="start" onCloseAutoFocus={(e) => e.preventDefault()}>
           <Command>
             <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -401,8 +413,9 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               {SERVITUDES_OPTIONS.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={() => { toggle(option.value, !selected.includes(option.value)); setOpen(true); }}
+                  value={`${option.label} ${option.description ?? ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggle(option.value, !selected.includes(option.value))}
                   className="flex items-start gap-2 p-3"
                 >
                   <Checkbox

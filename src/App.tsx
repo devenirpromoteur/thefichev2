@@ -19,6 +19,7 @@ import Signup from "./pages/Signup";
 import ResetPassword from "./pages/ResetPassword";
 import Account from "./pages/Account";
 import Projets from "./pages/Projets";
+import ProjetDetails from "./pages/ProjetDetails";
 import FicheDetails from "./pages/FicheDetails";
 import AuthCallback from "./pages/AuthCallback";
 
@@ -50,6 +51,7 @@ const App = () => (
             
             {/* Protected routes */}
             <Route path="/projets" element={<ProtectedRoute><Projets /></ProtectedRoute>} />
+            <Route path="/projets/:id" element={<ProtectedRoute><ProjetDetails /></ProtectedRoute>} />
             <Route path="/cadastre" element={<ProtectedRoute><Cadastre /></ProtectedRoute>} />
             <Route path="/plu" element={<ProtectedRoute><PLU /></ProtectedRoute>} />
             <Route path="/residents" element={<ProtectedRoute><Residents /></ProtectedRoute>} />

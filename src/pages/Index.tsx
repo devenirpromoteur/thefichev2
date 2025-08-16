@@ -125,30 +125,9 @@ const Index = () => {
           <p className="text-xl text-gray-600 mb-8 md:text-2xl">
             Optimisez vos projets immobiliers grâce à notre plateforme intuitive d'analyse et de gestion
           </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            {!isLoggedIn && (
-              <Link to="/register">
-                <Button size="lg" className="bg-brand hover:bg-brand-dark">
-                  Commencer gratuitement
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            )}
-            
-            <Button 
-              variant="outline" 
-              size="lg" 
-              onClick={toggleFeatures}
-              className="border-brand text-brand hover:bg-brand hover:text-white"
-            >
-              Découvrir les modules
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-            
-            <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
-              {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
-            </Button>
-          </div>
+          <Button id="mock-login-toggle" variant="ghost" size="sm" className="absolute top-4 right-4">
+            {isLoggedIn ? 'Simuler Déconnexion' : 'Simuler Connexion'}
+          </Button>
         </div>
       </section>
       

@@ -13,7 +13,7 @@ import { TotalSurface } from '@/components/cadastre/TotalSurface';
 import { ProjectConfigTable } from '@/components/projet/ProjectConfigTable';
 import { ServitudesMultiSelect } from '@/components/cadastre/ServitudesMultiSelect';
 import { ZoneSelect } from '@/components/cadastre/ZoneSelect';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { 
   Select,
   SelectContent,
@@ -621,6 +621,36 @@ export default function FicheDetails() {
                         />
                         <span className="ml-2">%</span>
                       </div>
+                      {/* Calculation line for theoretical exploitable surface */}
+                      {getTotalSurface() > 0 && fiche.empriseAuSol && (
+                        <div 
+                          className="mt-1 pt-1 border-t border-border/40 flex justify-between items-center"
+                          aria-live="polite"
+                        >
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-[11px] leading-tight text-muted-foreground cursor-help">
+                                  Surface exploitable théorique
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="text-xs">
+                                  Surface totale × (Emprise au sol ÷ 100)
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <span className="text-[11px] leading-tight font-medium text-foreground/70">
+                            {(() => {
+                              const exploitable = Math.round(getTotalSurface() * (fiche.empriseAuSol / 100));
+                              return exploitable > 1000 
+                                ? `${exploitable.toLocaleString('fr-FR')} m²`
+                                : `${exploitable.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`;
+                            })()}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-4">

@@ -496,19 +496,63 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     }, 0);
   };
 
-  const handleCadastreSelect = (id: string, sectionId: string) => {
+  // Debounced parcel save function  
+  const debouncedParcelSave = useCallback(
+    debounce(async (entryId: string, section: string, parcelle: string) => {
+      try {
+        const { error } = await supabase
+          .from('existing_values')
+          .update({
+            parcel_section: section || null,
+            parcel_code: parcelle || null
+          })
+          .eq('id', entryId)
+          .eq('project_id', projectId)
+          .select('id')
+          .single();
+
+        if (error) {
+          console.error('Error saving parcel selection:', error);
+          if (error.code === '42501') {
+            toast({
+              variant: "destructive",
+              title: "Erreur d'autorisation",
+              description: "Vous n'êtes pas autorisé à modifier cette parcelle.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Erreur de sauvegarde",
+              description: "Impossible de sauvegarder la sélection de parcelle.",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error in debouncedParcelSave:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Une erreur inattendue s'est produite lors de la sauvegarde.",
+        });
+      }
+    }, 300),
+    [projectId, toast]
+  );
+
+  const handleCadastreSelect = async (id: string, sectionId: string) => {
     // Find the current entry and its current cadastreId
     const currentEntry = entries.find(entry => entry.id === id);
     const oldCadastreId = currentEntry?.cadastreId;
     
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (selectedCadastre) {
+      // Optimistic update
       setEntries(prev => prev.map(entry => 
         entry.id === id ? { 
           ...entry, 
           section: selectedCadastre.section,
           parcelle: selectedCadastre.parcelle,
-          cadastreId: selectedCadastre.id // Update the link to cadastre
+          cadastreId: selectedCadastre.id
         } : entry
       ));
       
@@ -517,6 +561,11 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
         setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
       }
       setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
+
+      // Save to database (only for existing entries)
+      if (id && !id.startsWith('tmp_')) {
+        debouncedParcelSave(id, selectedCadastre.section, selectedCadastre.parcelle);
+      }
     }
   };
 
@@ -649,16 +698,27 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                   <Select 
                     value={entry.cadastreId || ""}
                     onValueChange={(value) => handleCadastreSelect(entry.id, value)}
+                    disabled={loading || cadastreEntries.length === 0}
                   >
                     <SelectTrigger className="h-8">
-                      <SelectValue placeholder="Sélectionner une parcelle" />
+                      <SelectValue placeholder={
+                        loading ? "Chargement..." : 
+                        cadastreEntries.length === 0 ? "Aucune parcelle cadastrale" : 
+                        "Sélectionner une parcelle"
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      {cadastreEntries.map((cadastre) => (
-                        <SelectItem key={cadastre.id} value={cadastre.id}>
-                          {cadastre.section} {cadastre.parcelle}
+                      {cadastreEntries.length === 0 ? (
+                        <SelectItem value="" disabled>
+                          Aucune parcelle disponible
                         </SelectItem>
-                      ))}
+                      ) : (
+                        cadastreEntries.map((cadastre) => (
+                          <SelectItem key={cadastre.id} value={cadastre.id}>
+                            {cadastre.section} {cadastre.parcelle}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </TableCell>

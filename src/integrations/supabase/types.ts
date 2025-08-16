@@ -47,6 +47,65 @@ export type Database = {
         }
         Relationships: []
       }
+      existing_values: {
+        Row: {
+          abatt: number | null
+          created_at: string | null
+          dvf: number | null
+          etat: number | null
+          id: string
+          notes: string | null
+          parcel_code: string | null
+          parcel_section: string | null
+          price_m2: number | null
+          price_unit: number | null
+          project_id: string
+          surface_or_count: number | null
+          tcap: number | null
+          type: string
+        }
+        Insert: {
+          abatt?: number | null
+          created_at?: string | null
+          dvf?: number | null
+          etat?: number | null
+          id?: string
+          notes?: string | null
+          parcel_code?: string | null
+          parcel_section?: string | null
+          price_m2?: number | null
+          price_unit?: number | null
+          project_id: string
+          surface_or_count?: number | null
+          tcap?: number | null
+          type: string
+        }
+        Update: {
+          abatt?: number | null
+          created_at?: string | null
+          dvf?: number | null
+          etat?: number | null
+          id?: string
+          notes?: string | null
+          parcel_code?: string | null
+          parcel_section?: string | null
+          price_m2?: number | null
+          price_unit?: number | null
+          project_id?: string
+          surface_or_count?: number | null
+          tcap?: number | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "existing_values_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plu_servitudes: {
         Row: {
           created_at: string

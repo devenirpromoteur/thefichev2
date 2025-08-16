@@ -147,6 +147,18 @@ const Residents = () => {
     return undefined;
   };
 
+  // Map ficheId to existing project UUIDs for persistence
+  const getProjectIdForFiche = (ficheId: string | undefined): string => {
+    const ficheToProjectMap: Record<string, string> = {
+      '1': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+      '2': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+      '3': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+    };
+    return ficheToProjectMap[ficheId || ''] || 'ea881c96-3ac0-471f-a3f6-a08344eb9325';
+  };
+  
+  const projectId = getProjectIdForFiche(getFicheId());
+
   return (
     <PageLayout>
       <div className="animate-enter">
@@ -412,6 +424,7 @@ const Residents = () => {
             <CardContent className="pt-6">
               <PropertyValueTable 
                 ficheId={getFicheId()} 
+                projectId={projectId}
                 cadastreEntries={cadastreEntries}
               />
             </CardContent>

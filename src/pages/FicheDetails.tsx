@@ -810,6 +810,7 @@ export default function FicheDetails() {
               <div className="mt-2">
                 <PropertyValueTable 
                   ficheId={ficheId} 
+                  projectId={projectId}
                   cadastreEntries={entries.map(entry => ({
                     id: entry.id,
                     section: entry.section,

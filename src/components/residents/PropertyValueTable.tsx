@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
 } from '@/components/ui/table';
@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { supabase } from '@/integrations/supabase/client';
 
 type PropertyEntry = {
   id: string;
@@ -30,6 +32,7 @@ type PropertyEntry = {
 
 interface PropertyValueTableProps {
   ficheId: string | undefined;
+  projectId: string;
   cadastreEntries: Array<{
     id: string;
     section: string;
@@ -39,130 +42,185 @@ interface PropertyValueTableProps {
 
 export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({ 
   ficheId, 
+  projectId,
   cadastreEntries 
 }) => {
   const { toast } = useToast();
   const [entries, setEntries] = useState<PropertyEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; entryId: string | null }>({ open: false, entryId: null });
 
+  // Map UI property types to database types
   const propertyTypes = [
-    "Logements",
-    "Bureaux",
-    "Commerces",
-    "Entrepôts",
-    "Bâtiments industriels",
-    "Parkings",
-    "Garages"
+    { label: "Logements", value: "LOGEMENTS" },
+    { label: "Parkings", value: "PARKINGS" },
+    { label: "Autres", value: "AUTRES" }
   ];
 
-  // Load saved property values once on component mount
-  useEffect(() => {
-    if (ficheId && !initialized) {
-      const storedData = localStorage.getItem(`propertyValues_${ficheId}`);
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setEntries(parsedData);
-        setProcessedCadastreIds(parsedData.filter((entry: PropertyEntry) => entry.cadastreId).map((entry: PropertyEntry) => entry.cadastreId));
+  const getPropertyTypeLabel = (dbValue: string): string => {
+    const type = propertyTypes.find(t => t.value === dbValue);
+    return type ? type.label : dbValue;
+  };
+
+  // Load existing values from Supabase
+  const loadExistingValues = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast({
+          variant: "destructive",
+          title: "Erreur d'authentification",
+          description: "Vous devez être connecté pour accéder à ces données.",
+        });
+        return;
       }
-      setInitialized(true);
-    }
-  }, [ficheId, initialized]);
 
-  // Synchronize with cadastre entries only after initialization
-  useEffect(() => {
-    if (!initialized || !cadastreEntries.length || !ficheId) return;
+      const { data, error } = await supabase
+        .from('existing_values')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at');
 
-    // Find cadastre entries that don't have a corresponding property entry
-    const newCadastreEntries = cadastreEntries.filter(
-      cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
-    );
-
-    if (newCadastreEntries.length > 0) {
-      const newPropertyEntries: PropertyEntry[] = newCadastreEntries.map(cadastreEntry => ({
-        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-        section: cadastreEntry.section || '',
-        parcelle: cadastreEntry.parcelle || '',
-        type: 'Logements',
-        surface: '',
-        abattement: 1,
-        prixM2: '',
-        tauxCap: 0.05,
-        etat: 1,
-        valeur: 0,
-        dvf: '',
-        cadastreId: cadastreEntry.id
-      }));
-
-      setEntries(prev => [...prev, ...newPropertyEntries]);
-      setProcessedCadastreIds(prev => [...prev, ...newCadastreEntries.map(entry => entry.id)]);
-      
-      toast({
-        title: "Nouvelles parcelles ajoutées",
-        description: `${newPropertyEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
-      });
-    }
-
-    // Check for deleted cadastre entries and remove corresponding property entries
-    const existingCadastreIds = cadastreEntries.map(entry => entry.id);
-    const entriesWithDeletedCadastre = entries.filter(
-      entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
-    );
-
-    if (entriesWithDeletedCadastre.length > 0) {
-      setEntries(prev => prev.filter(entry => 
-        !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
-      ));
-      
-      // Update processedCadastreIds to remove deleted entries
-      setProcessedCadastreIds(prev => prev.filter(id => existingCadastreIds.includes(id)));
-      
-      toast({
-        title: "Parcelles supprimées",
-        description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
-      });
-    }
-
-    // Update section/parcelle info for existing entries if they changed in cadastre
-    let updatedEntries = false;
-    const newEntries = entries.map(entry => {
-      if (entry.cadastreId) {
-        const correspondingCadastreEntry = cadastreEntries.find(
-          cadastreEntry => cadastreEntry.id === entry.cadastreId
-        );
-        
-        if (correspondingCadastreEntry && 
-            (entry.section !== correspondingCadastreEntry.section || 
-             entry.parcelle !== correspondingCadastreEntry.parcelle)) {
-          updatedEntries = true;
-          return {
-            ...entry,
-            section: correspondingCadastreEntry.section,
-            parcelle: correspondingCadastreEntry.parcelle
-          };
+      if (error) {
+        console.error('Error loading existing values:', error);
+        if (error.code === '42501') {
+          toast({
+            variant: "destructive",
+            title: "Erreur d'autorisation",
+            description: "Vous n'êtes pas autorisé à accéder à ces données.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Erreur de chargement",
+            description: "Impossible de charger les données existantes.",
+          });
         }
+        return;
       }
-      return entry;
-    });
 
-    if (updatedEntries) {
-      setEntries(newEntries);
+      if (data) {
+        const mappedEntries: PropertyEntry[] = data.map(item => ({
+          id: item.id,
+          section: item.parcel_section || '',
+          parcelle: item.parcel_code || '',
+          type: getPropertyTypeLabel(item.type),
+          surface: item.surface_or_count || '',
+          abattement: item.abatt || 1,
+          prixM2: item.price_m2 || '',
+          tauxCap: item.tcap || 0.05,
+          etat: item.etat || 1,
+          valeur: 0, // Will be calculated
+          dvf: item.dvf || '',
+          cadastreId: '' // Will be mapped if needed
+        }));
+
+        // Calculate values for all entries
+        const entriesWithValues = mappedEntries.map(entry => ({
+          ...entry,
+          valeur: calculateValue(entry)
+        }));
+
+        setEntries(entriesWithValues);
+      }
+    } catch (error) {
+      console.error('Error in loadExistingValues:', error);
       toast({
-        title: "Parcelles mises à jour",
-        description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
+        variant: "destructive",
+        title: "Erreur",
+        description: "Une erreur inattendue s'est produite.",
       });
+    } finally {
+      setLoading(false);
     }
-  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
+  }, [projectId, toast]);
 
-  // Save changes to localStorage
+  // Load data on mount
   useEffect(() => {
-    if (ficheId && entries.length > 0 && initialized) {
-      localStorage.setItem(`propertyValues_${ficheId}`, JSON.stringify(entries));
+    if (projectId) {
+      loadExistingValues();
     }
-  }, [entries, ficheId, initialized]);
+  }, [projectId, loadExistingValues]);
 
-  const handleAddEntry = () => {
+  // Create new entry in database
+  const createEntry = async (newEntryData: Omit<PropertyEntry, 'id' | 'valeur'>) => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session) {
+        toast({
+          variant: "destructive",
+          title: "Erreur d'authentification",
+          description: "Vous devez être connecté pour créer une entrée.",
+        });
+        return null;
+      }
+
+      const dbType = propertyTypes.find(t => t.label === newEntryData.type)?.value || 'AUTRES';
+      
+      const { data, error } = await supabase
+        .from('existing_values')
+        .insert({
+          project_id: projectId,
+          parcel_section: newEntryData.section || null,
+          parcel_code: newEntryData.parcelle || null,
+          type: dbType,
+          surface_or_count: newEntryData.surface || null,
+          abatt: newEntryData.abattement || 1,
+          price_m2: newEntryData.prixM2 || null,
+          price_unit: null,
+          tcap: newEntryData.tauxCap || 0.05,
+          etat: newEntryData.etat || 1,
+          dvf: newEntryData.dvf || null,
+          notes: null
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Error creating entry:', error);
+        if (error.code === '42501') {
+          toast({
+            variant: "destructive",
+            title: "Erreur d'autorisation",
+            description: "Vous n'êtes pas autorisé à créer cette entrée.",
+          });
+        } else if (error.code === '23503') {
+          toast({
+            variant: "destructive",
+            title: "Erreur de référence",
+            description: "Le projet spécifié n'existe pas.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Erreur de création",
+            description: "Impossible de créer la nouvelle entrée.",
+          });
+        }
+        return null;
+      }
+
+      return data.id;
+    } catch (error) {
+      console.error('Error in createEntry:', error);
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Une erreur inattendue s'est produite lors de la création.",
+      });
+      return null;
+    }
+  };
+
+  const handleAddEntry = async () => {
+    if (saving) return; // Prevent double-click
+    
+    setSaving('new');
+    
     // Find a cadastre entry that hasn't been used yet
     const unusedCadastreEntry = cadastreEntries.find(entry => 
       !processedCadastreIds.includes(entry.id)
@@ -172,45 +230,180 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     const defaultCadastreEntry = unusedCadastreEntry || 
       (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
     
-    const newEntry: PropertyEntry = {
-      id: Date.now().toString(),
+    const newEntryData = {
       section: defaultCadastreEntry.section || '',
       parcelle: defaultCadastreEntry.parcelle || '',
       type: 'Logements',
-      surface: '',
-      abattement: 1,
-      prixM2: '',
-      tauxCap: 0.05,
-      etat: 1,
-      valeur: 0,
-      dvf: '',
-      cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
+      surface: '' as number | '',
+      abattement: 1 as number | '',
+      prixM2: '' as number | '',
+      tauxCap: 0.05 as number | '',
+      etat: 1 as number | '',
+      dvf: '' as number | '',
+      cadastreId: defaultCadastreEntry.id || ''
     };
     
-    setEntries(prev => [...prev, newEntry]);
+    const entryId = await createEntry(newEntryData);
     
-    // If we used an unused cadastre entry, add it to processed ids
-    if (unusedCadastreEntry) {
-      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+    if (entryId) {
+      const newEntry: PropertyEntry = {
+        ...newEntryData,
+        id: entryId,
+        valeur: calculateValue(newEntryData as PropertyEntry)
+      };
+      
+      setEntries(prev => [newEntry, ...prev]); // Add at beginning
+      
+      // If we used an unused cadastre entry, add it to processed ids
+      if (unusedCadastreEntry) {
+        setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+      }
+      
+      toast({
+        title: "Ligne ajoutée",
+        description: "La nouvelle ligne a été créée avec succès.",
+      });
     }
+    
+    setSaving(null);
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const deleteEntry = async (id: string) => {
     const entryToDelete = entries.find(entry => entry.id === id);
-    if (entryToDelete && entryToDelete.cadastreId) {
-      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-    }
+    if (!entryToDelete) return;
+
+    // Check if it's a temporary entry (not yet saved)
+    const isTemporary = !id || id.startsWith('tmp_');
     
+    // Optimistic update
     setEntries(prev => prev.filter(entry => entry.id !== id));
     if (selectedRow === id) {
       setSelectedRow(null);
     }
     
-    toast({
-      title: "Ligne supprimée",
-      description: "La ligne a été supprimée avec succès",
-    });
+    if (entryToDelete.cadastreId) {
+      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
+    }
+
+    // If temporary, no need to delete from database
+    if (isTemporary) {
+      toast({
+        title: "Ligne supprimée",
+        description: "La ligne temporaire a été supprimée.",
+      });
+      return;
+    }
+
+    // Delete from database
+    try {
+      const { error } = await supabase
+        .from('existing_values')
+        .delete()
+        .eq('id', id)
+        .eq('project_id', projectId);
+
+      if (error) {
+        console.error('Error deleting entry:', error);
+        // Rollback on error
+        setEntries(prev => [entryToDelete, ...prev]);
+        if (entryToDelete.cadastreId) {
+          setProcessedCadastreIds(prev => [...prev, entryToDelete.cadastreId]);
+        }
+        
+        if (error.code === '42501') {
+          toast({
+            variant: "destructive",
+            title: "Erreur d'autorisation",
+            description: "Vous n'êtes pas autorisé à supprimer cette entrée.",
+          });
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Erreur de suppression",
+            description: "Impossible de supprimer la ligne.",
+          });
+        }
+        return;
+      }
+
+      toast({
+        title: "Ligne supprimée",
+        description: "La ligne a été supprimée avec succès.",
+      });
+    } catch (error) {
+      console.error('Error in deleteEntry:', error);
+      // Rollback on error
+      setEntries(prev => [entryToDelete, ...prev]);
+      if (entryToDelete.cadastreId) {
+        setProcessedCadastreIds(prev => [...prev, entryToDelete.cadastreId]);
+      }
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Une erreur inattendue s'est produite lors de la suppression.",
+      });
+    }
   };
+
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirm({ open: true, entryId: id });
+  };
+
+  const confirmDelete = () => {
+    if (deleteConfirm.entryId) {
+      deleteEntry(deleteConfirm.entryId);
+    }
+  };
+
+  // Debounced save function
+  const debouncedSave = useCallback(
+    debounce(async (entryId: string, updatedEntry: PropertyEntry) => {
+      try {
+        const dbType = propertyTypes.find(t => t.label === updatedEntry.type)?.value || 'AUTRES';
+        
+        const { error } = await supabase
+          .from('existing_values')
+          .update({
+            parcel_section: updatedEntry.section || null,
+            parcel_code: updatedEntry.parcelle || null,
+            type: dbType,
+            surface_or_count: updatedEntry.surface || null,
+            abatt: updatedEntry.abattement || 1,
+            price_m2: updatedEntry.prixM2 || null,
+            tcap: updatedEntry.tauxCap || 0.05,
+            etat: updatedEntry.etat || 1,
+            dvf: updatedEntry.dvf || null
+          })
+          .eq('id', entryId)
+          .eq('project_id', projectId);
+
+        if (error) {
+          console.error('Error updating entry:', error);
+          if (error.code === '42501') {
+            toast({
+              variant: "destructive",
+              title: "Erreur d'autorisation",
+              description: "Vous n'êtes pas autorisé à modifier cette entrée.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Erreur de sauvegarde",
+              description: "Impossible de sauvegarder les modifications.",
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error in debouncedSave:', error);
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Une erreur inattendue s'est produite lors de la sauvegarde.",
+        });
+      }
+    }, 1000),
+    [projectId, toast, propertyTypes]
+  );
 
   const handleInputChange = (id: string, field: keyof PropertyEntry, value: string | number) => {
     setEntries(prev => prev.map(entry => {
@@ -224,11 +417,25 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
           updatedEntry.valeur = calculated;
         }
         
+        // Auto-save changes with debounce (only for existing entries)
+        if (id && !id.startsWith('tmp_')) {
+          debouncedSave(id, updatedEntry);
+        }
+        
         return updatedEntry;
       }
       return entry;
     }));
   };
+
+  // Simple debounce implementation
+  function debounce<T extends (...args: any[]) => any>(func: T, wait: number): T {
+    let timeout: NodeJS.Timeout;
+    return ((...args: any[]) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    }) as T;
+  }
 
   const calculateValue = (entry: PropertyEntry): number => {
     // Early return if essential values are missing
@@ -242,7 +449,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
     const etat = Number(entry.etat);
     
     // Special calculation for parking
-    if (entry.type === 'Parkings') {
+    if (entry.type === 'Parkings' || entry.type === 'PARKINGS') {
       const tauxCap = Number(entry.tauxCap);
       
       // Base calculation for parking: (Nb_places × Prix_unitaire) × Abattement × État
@@ -256,7 +463,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       }
     }
     // For residential properties
-    else if (entry.type === 'Logements') {
+    else if (entry.type === 'Logements' || entry.type === 'LOGEMENTS') {
       return (surface * abattement * prixM2 * etat) / 1000;
     } 
     // For commercial/tertiary properties
@@ -334,13 +541,15 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-brand">Valeurs de l'existant</h2>
         <div className="flex space-x-2">
-          <Button 
+        <Button 
             variant="outline" 
             size="sm" 
             onClick={handleAddEntry}
+            disabled={saving === 'new' || loading}
             className="flex items-center gap-1"
           >
-            <Plus className="h-4 w-4" /> Ajouter
+            <Plus className="h-4 w-4" /> 
+            {saving === 'new' ? 'Ajout...' : 'Ajouter'}
           </Button>
         </div>
       </div>
@@ -454,7 +663,7 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                   </Select>
                 </TableCell>
                 <TableCell>
-                  <Select 
+                    <Select 
                     value={entry.type} 
                     onValueChange={(value) => handleInputChange(entry.id, 'type', value)}
                   >
@@ -463,8 +672,8 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     </SelectTrigger>
                     <SelectContent>
                       {propertyTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
+                        <SelectItem key={type.value} value={type.label}>
+                          {type.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -541,8 +750,9 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteEntry(entry.id);
+                      handleDeleteClick(entry.id);
                     }}
+                    disabled={loading}
                     className="h-8 w-8 text-destructive hover:text-destructive/90"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -580,6 +790,17 @@ export const PropertyValueTable: React.FC<PropertyValueTableProps> = ({
           <li><span className="font-medium">Autres types :</span> Valeur (K€) = (Surface × Abattement × Prix m² × État) / (T.cap × 1000)</li>
         </ul>
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => setDeleteConfirm({ open, entryId: null })}
+        title="Supprimer la ligne"
+        description="Êtes-vous sûr de vouloir supprimer cette ligne ? Cette action est irréversible."
+        confirmText="Supprimer"
+        cancelText="Annuler"
+        onConfirm={confirmDelete}
+        destructive
+      />
     </div>
   );
 };

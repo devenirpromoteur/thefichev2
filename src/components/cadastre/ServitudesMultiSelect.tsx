@@ -11,9 +11,25 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
 const servitudesSchema = z.array(z.string().min(2)).max(20);
+
+const DEFAULT_OPTIONS = [
+  'PAPAG',
+  'Monuments/ABF', 
+  'Protection végétale (EBC…)',
+  'Emplacements réservés',
+  'Voies/Emprises publiques',
+  'Mixité sociale',
+  'Non aedificandi',
+  'Ligne/Marge de recul',
+  'Continuité/Discontinuité',
+  'Polygone d\'implantation',
+  'Passage',
+  'Risques naturels (PPRN/PPRI/PPRT/PPRM)',
+  'Autre…'
+];
 
 const SERVITUDES_OPTIONS = [
   { 
@@ -121,25 +137,17 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   const [notesByType, setNotesByType] = useState<Record<string, string>>({});
   const [customServitude, setCustomServitude] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [userInteracted, setUserInteracted] = useState(false);
-  const consecutiveFailuresRef = useRef(0);
-  const lastErrorToastRef = useRef<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Load servitudes with React Query
-  const {
-    data: servitudesData,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isRefetching
-  } = useQuery({
-    queryKey: ['servitudes', projectId],
+  // Use default options (no API call needed)
+  const availableOptions = DEFAULT_OPTIONS;
+
+  // Load servitudes with React Query  
+  const { data: servitudesData = [] } = useQuery({
+    queryKey: ['plu-servitudes', projectId],
     queryFn: async () => {
-      // Don't fetch if projectId is not a valid UUID (local storage mode)
       if (!isValidUUID(projectId)) {
         return [];
       }
@@ -159,116 +167,16 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     staleTime: 60000,
     retry: 1,
     refetchOnWindowFocus: false,
-    enabled: isValidUUID(projectId), // Only fetch if UUID is valid
+    enabled: isValidUUID(projectId)
   });
 
-  // Handle success - reset consecutive failures
-  useEffect(() => {
-    if (!isLoading && !isError) {
-      consecutiveFailuresRef.current = 0;
-    }
-  }, [isLoading, isError]);
-
-  // Handle errors with throttling and user interaction check
-  useEffect(() => {
-    if (isError && error) {
-      console.error('Error loading servitudes:', error);
-      consecutiveFailuresRef.current += 1;
+  // Optimistic mutation for servitude selection
+  const servitudeMutation = useMutation({
+    mutationFn: async ({ type, present }: { type: string; present: boolean }) => {
+      if (!isValidUUID(projectId)) return;
       
-      // Only show toast on user interaction or after 2 consecutive failures
-      const shouldShowToast = userInteracted || consecutiveFailuresRef.current >= 2;
-      const now = Date.now();
-      const canShowToast = now - lastErrorToastRef.current > 60000; // 60s throttle
-      
-      if (shouldShowToast && canShowToast) {
-        let errorMessage = "Impossible de charger les servitudes";
-        
-        // Check for specific error types
-        const errorObj = error as any;
-        if (errorObj?.code === '42501') {
-          errorMessage = "Droits d'accès insuffisants";
-        } else if (errorObj?.code === '22P02') {
-          errorMessage = "Format d'identifiant invalide";
-        } else if (error?.message?.toLowerCase().includes('network') || error?.message?.toLowerCase().includes('timeout')) {
-          errorMessage = "Erreur de connexion - Veuillez réessayer";
-        }
-        
-        toast({
-          title: "Erreur",
-          description: errorMessage,
-          variant: "destructive",
-        });
-        
-        lastErrorToastRef.current = now;
-      }
-    }
-  }, [isError, error, userInteracted, toast]);
-
-  // Update local state when data changes
-  useEffect(() => {
-    if (servitudesData) {
-      const selectedTypes = servitudesData.map(item => item.type);
-      const notes = servitudesData.reduce((acc, item) => {
-        if (item.notes) acc[item.type] = item.notes;
-        return acc;
-      }, {} as Record<string, string>);
-
-      setSelected(selectedTypes);
-      setNotesByType(notes);
-    }
-  }, [servitudesData]);
-
-  const saveServitudes = async () => {
-    try {
-      // Validate selection
-      const validation = servitudesSchema.safeParse(selected);
-      if (!validation.success) {
-        toast({
-          title: "Validation",
-          description: "Nombre de servitudes invalide (max 20)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setSaving(true);
-
-      // Get all existing servitudes for this project
-      const { data: existing } = await supabase
-        .from('cadastre_servitudes')
-        .select('type')
-        .eq('project_id', projectId);
-
-      const existingTypes = existing?.map(item => item.type) || [];
-
-      // Delete deselected servitudes
-      const toDelete = existingTypes.filter(type => !selected.includes(type));
-      if (toDelete.length > 0) {
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .delete()
-          .eq('project_id', projectId)
-          .in('type', toDelete);
-
-        if (error) throw error;
-      }
-
-      // Upsert selected servitudes
-      for (const type of selected) {
-        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === type);
+      if (present) {
         const notes = notesByType[type];
-
-        // Validate required notes
-        if (servitudeOption?.requiresNote && !notes?.trim()) {
-          toast({
-            title: "Information manquante",
-            description: `Veuillez renseigner une valeur pour "${servitudeOption.label}"`,
-            variant: "destructive",
-          });
-          setSaving(false);
-          return;
-        }
-
         const { error } = await supabase
           .from('cadastre_servitudes')
           .upsert({
@@ -276,49 +184,52 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
             type,
             present: true,
             notes: notes?.trim() || null
-          });
-
+          }, { onConflict: 'project_id,type' });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('cadastre_servitudes')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('type', type);
         if (error) throw error;
       }
-
-      toast({
-        title: "Sauvegarde réussie",
-        description: "Les servitudes ont été mises à jour",
-      });
-
-    } catch (error) {
-      console.error('Error saving servitudes:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de sauvegarder les servitudes",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plu-servitudes', projectId] });
     }
-  };
+  });
+
+  // Update local state when data changes
+  useEffect(() => {
+    const selectedTypes = servitudesData.map(item => item.type);
+    const notes = servitudesData.reduce((acc, item) => {
+      if (item.notes) acc[item.type] = item.notes;
+      return acc;
+    }, {} as Record<string, string>);
+
+    setSelected(selectedTypes);
+    setNotesByType(notes);
+  }, [servitudesData]);
+
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen) {
-      setUserInteracted(true); // Mark user interaction when opening popover
-    }
     setOpen(newOpen);
-    if (!newOpen && !saving) {
-      saveServitudes();
-    }
-  };
-
-  const handleRefresh = () => {
-    setUserInteracted(true);
-    refetch();
   };
 
   const handleSelect = (value: string) => {
-    setSelected(prev => 
-      prev.includes(value) 
-        ? prev.filter(item => item !== value)
-        : [...prev, value]
-    );
+    const isCurrentlySelected = selected.includes(value);
+    const newSelected = isCurrentlySelected 
+      ? selected.filter(item => item !== value)
+      : [...selected, value];
+    
+    setSelected(newSelected);
+    
+    // Optimistic update
+    servitudeMutation.mutate({
+      type: value,
+      present: !isCurrentlySelected
+    });
   };
 
   const handleNoteChange = (type: string, note: string) => {
@@ -329,13 +240,24 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const handleSelectAll = () => {
-    const allValues = SERVITUDES_OPTIONS.map(opt => opt.value);
+    const allValues = availableOptions.slice(0, -1); // Exclude "Autre…"
     setSelected(allValues);
+    // Batch optimistic updates
+    allValues.forEach(value => {
+      if (!selected.includes(value)) {
+        servitudeMutation.mutate({ type: value, present: true });
+      }
+    });
   };
 
   const handleClearAll = () => {
+    const toRemove = [...selected];
     setSelected([]);
     setNotesByType({});
+    // Batch optimistic updates
+    toRemove.forEach(value => {
+      servitudeMutation.mutate({ type: value, present: false });
+    });
   };
 
   const handleAddCustom = () => {
@@ -352,44 +274,9 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       const { [value]: _, ...rest } = prev;
       return rest;
     });
+    // Optimistic update
+    servitudeMutation.mutate({ type: value, present: false });
   };
-
-  const getServitudeLabel = (value: string) => {
-    const option = SERVITUDES_OPTIONS.find(opt => opt.value === value);
-    return option?.label || value;
-  };
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <div className="space-y-2">
-        <label className="block text-sm font-medium mb-1">Servitudes</label>
-        <div className="h-10 bg-muted animate-pulse rounded-md"></div>
-      </div>
-    );
-  }
-
-  // Show empty state for non-UUID project IDs (localStorage mode)
-  if (!isValidUUID(projectId)) {
-    return (
-      <div className="space-y-2">
-        <label className="block text-sm font-medium mb-1">
-          Servitudes
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="ml-1 text-muted-foreground cursor-help">ℹ</span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Fonctionnalité disponible avec un projet connecté</p>
-            </TooltipContent>
-          </Tooltip>
-        </label>
-        <div className="p-3 text-sm text-muted-foreground bg-muted/30 rounded-md">
-          Aucune servitude enregistrée
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-2">
@@ -416,7 +303,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               disabled && "cursor-not-allowed opacity-50",
               open && "ring-2 ring-[#4F3CE7] border-[#4F3CE7]"
             )}
-            disabled={disabled}
+            disabled={disabled || isSaving}
           >
             <span className="truncate">
               {selected.length === 0 
@@ -440,18 +327,9 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleRefresh}
-                  className="h-7 text-xs"
-                  disabled={isRefetching}
-                >
-                  <RefreshCw className={cn("w-3 h-3 mr-1", isRefetching && "animate-spin")} />
-                  {isRefetching ? "..." : "Actualiser"}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
                   onClick={handleSelectAll}
                   className="h-7 text-xs"
+                  disabled={isSaving}
                 >
                   <CheckCheck className="w-3 h-3 mr-1" />
                   Tout sélectionner
@@ -461,6 +339,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                   size="sm"
                   onClick={handleClearAll}
                   className="h-7 text-xs"
+                  disabled={isSaving}
                 >
                   <Trash2 className="w-3 h-3 mr-1" />
                   Effacer
@@ -474,41 +353,50 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
             <CommandList className="max-h-[300px]">
               <CommandEmpty>Aucune servitude trouvée.</CommandEmpty>
               
-              {SERVITUDES_OPTIONS.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.value}
-                  onSelect={() => handleSelect(option.value)}
-                  className="flex items-start gap-2 p-3"
-                >
-                  <Checkbox
-                    checked={selected.includes(option.value)}
-                    onChange={() => handleSelect(option.value)}
-                  />
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{option.label}</span>
-                      {option.isAlert && (
-                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+              {availableOptions.slice(0, -1).map((optionLabel) => {
+                const option = SERVITUDES_OPTIONS.find(opt => opt.label === optionLabel) || { 
+                  value: optionLabel.toLowerCase().replace(/[^a-z0-9]/g, '_'), 
+                  label: optionLabel,
+                  description: '',
+                  requiresNote: false,
+                  isAlert: false
+                };
+                return (
+                  <CommandItem
+                    key={option.value}
+                    value={option.value}
+                    onSelect={() => handleSelect(option.value)}
+                    className="flex items-start gap-2 p-3"
+                  >
+                    <Checkbox
+                      checked={selected.includes(option.value)}
+                      onChange={() => handleSelect(option.value)}
+                    />
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{option.label}</span>
+                        {option.isAlert && (
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        )}
+                      </div>
+                      {option.description && (
+                        <p className="text-xs text-muted-foreground">
+                          {option.description}
+                        </p>
+                      )}
+                      {selected.includes(option.value) && option.requiresNote && (
+                        <Input
+                          placeholder={option.placeholder || ''}
+                          value={notesByType[option.value] || ''}
+                          onChange={(e) => handleNoteChange(option.value, e.target.value)}
+                          className="h-7 text-xs mt-2"
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       )}
                     </div>
-                    {option.description && (
-                      <p className="text-xs text-muted-foreground">
-                        {option.description}
-                      </p>
-                    )}
-                    {selected.includes(option.value) && option.requiresNote && (
-                      <Input
-                        placeholder={option.placeholder}
-                        value={notesByType[option.value] || ''}
-                        onChange={(e) => handleNoteChange(option.value, e.target.value)}
-                        className="h-7 text-xs mt-2"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    )}
-                  </div>
-                </CommandItem>
-              ))}
+                  </CommandItem>
+                );
+              })}
 
               <div className="border-t p-2">
                 {isAddingCustom ? (
@@ -573,7 +461,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               variant="secondary"
               className="text-xs flex items-center gap-1"
             >
-              {getServitudeLabel(value)}
+              {value}
               {!disabled && (
                 <button
                   onClick={() => handleRemoveServitude(value)}

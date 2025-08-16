@@ -83,6 +83,18 @@ export default function FicheDetails() {
   const [fiche, setFiche] = useState<Fiche | null>(null);
   const [loading, setLoading] = useState(true);
   
+  // Map ficheId to existing project UUIDs for servitudes persistence
+  const getProjectIdForFiche = (ficheId: string | undefined): string => {
+    const ficheToProjectMap: Record<string, string> = {
+      '1': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+      '2': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+      '3': 'ea881c96-3ac0-471f-a3f6-a08344eb9325',
+    };
+    return ficheToProjectMap[ficheId || ''] || 'ea881c96-3ac0-471f-a3f6-a08344eb9325';
+  };
+  
+  const projectId = getProjectIdForFiche(ficheId);
+  
   const [entries, setEntries] = useState<CadastreEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   
@@ -697,7 +709,7 @@ export default function FicheDetails() {
                   <div className="md:col-span-2">
                     <TooltipProvider>
                       <ServitudesMultiSelect 
-                        projectId={ficheId} 
+                        projectId={projectId}
                         disabled={!isEditing}
                       />
                     </TooltipProvider>

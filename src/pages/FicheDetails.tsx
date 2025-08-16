@@ -10,7 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 import { CadastreTable } from '@/components/cadastre/CadastreTable';
 import { TableActions } from '@/components/cadastre/TableActions';
 import { TotalSurface } from '@/components/cadastre/TotalSurface';
-import { ProjectConfigTable } from '@/components/projet/ProjectConfigTable'; 
+import { ProjectConfigTable } from '@/components/projet/ProjectConfigTable';
+import { ServitudesMultiSelect } from '@/components/cadastre/ServitudesMultiSelect';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { 
   Select,
   SelectContent,
@@ -669,6 +671,14 @@ export default function FicheDetails() {
                       placeholder="À définir selon la règle"
                       disabled={!isEditing}
                     />
+                  </div>
+                  <div className="md:col-span-2">
+                    <TooltipProvider>
+                      <ServitudesMultiSelect 
+                        projectId={ficheId} 
+                        disabled={!isEditing}
+                      />
+                    </TooltipProvider>
                   </div>
                 </div>
               </div>

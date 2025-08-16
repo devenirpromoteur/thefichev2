@@ -4,6 +4,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Cadastre from "./pages/Cadastre";
@@ -12,7 +14,10 @@ import Residents from "./pages/Residents";
 import Projet from "./pages/Projet";
 import Synthese from "./pages/Synthese";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
+import Signup from "./pages/Signup";
+import ResetPassword from "./pages/ResetPassword";
+import Account from "./pages/Account";
+import Projets from "./pages/Projets";
 import FicheDetails from "./pages/FicheDetails";
 
 // Création du client de requête pour React Query
@@ -31,22 +36,28 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/cadastre" element={<Cadastre />} />
-          <Route path="/plu" element={<PLU />} />
-          <Route path="/residents" element={<Residents />} />
-          <Route path="/projet" element={<Projet />} />
-          <Route path="/fiche/:ficheId" element={<FicheDetails />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          
-          {/* Route maintenue mais rendue moins accessible */}
-          <Route path="/synthese" element={<Synthese />} />
-          
-          {/* Toutes les routes personnalisées doivent être ajoutées au-dessus de la route catch-all "*" */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/" element={<Index />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            
+            {/* Protected routes */}
+            <Route path="/projets" element={<ProtectedRoute><Projets /></ProtectedRoute>} />
+            <Route path="/cadastre" element={<ProtectedRoute><Cadastre /></ProtectedRoute>} />
+            <Route path="/plu" element={<ProtectedRoute><PLU /></ProtectedRoute>} />
+            <Route path="/residents" element={<ProtectedRoute><Residents /></ProtectedRoute>} />
+            <Route path="/projet" element={<ProtectedRoute><Projet /></ProtectedRoute>} />
+            <Route path="/fiche/:ficheId" element={<ProtectedRoute><FicheDetails /></ProtectedRoute>} />
+            <Route path="/synthese" element={<ProtectedRoute><Synthese /></ProtectedRoute>} />
+            <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+            
+            {/* Catch-all route */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -4,6 +4,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 // Les items du menu principal sont masqués par défaut
 // Ils s'afficheront dans la vue détaillée de la fiche
@@ -14,8 +16,8 @@ const navItems = [
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const location = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -25,22 +27,6 @@ export function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => {
       window.removeEventListener('scroll', handleScroll);
-    };
-  }, []);
-
-  // Vérifier si l'utilisateur est connecté
-  useEffect(() => {
-    const checkLoginStatus = () => {
-      const mockLoggedIn = localStorage.getItem('mockUserLoggedIn') === 'true';
-      setIsLoggedIn(mockLoggedIn);
-    };
-    
-    checkLoginStatus();
-    
-    // Pour la démo uniquement - à remplacer par l'authentification réelle Supabase
-    window.addEventListener('storage', checkLoginStatus);
-    return () => {
-      window.removeEventListener('storage', checkLoginStatus);
     };
   }, []);
 
@@ -80,21 +66,25 @@ export function Header() {
           ))}
         </nav>
         
-        {/* Boutons d'authentification - masqués si l'utilisateur est connecté */}
-        {!isLoggedIn && (
-          <div className="hidden md:flex items-center space-x-4">
-            <Link to="/login">
-              <Button variant="outline" size="sm" className="font-medium">
-                Connexion
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button size="sm" className="font-medium bg-brand hover:bg-brand-dark">
-                Inscription
-              </Button>
-            </Link>
-          </div>
-        )}
+        {/* Authentication buttons or user menu */}
+        <div className="hidden md:flex items-center space-x-4">
+          {user ? (
+            <UserMenu />
+          ) : (
+            <div className="flex space-x-2">
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="font-medium">
+                  Connexion
+                </Button>
+              </Link>
+              <Link to="/signup">
+                <Button size="sm" className="font-medium">
+                  Inscription
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
         
         {/* Mobile menu button */}
         <button 
@@ -124,21 +114,39 @@ export function Header() {
               </Link>
             ))}
             
-            {/* Boutons d'authentification mobile - masqués si l'utilisateur est connecté */}
-            {!isLoggedIn && (
-              <div className="pt-4 flex flex-col space-y-2">
-                <Link to="/login">
-                  <Button variant="outline" className="w-full justify-center font-medium">
-                    Connexion
-                  </Button>
-                </Link>
-                <Link to="/register">
-                  <Button className="w-full justify-center font-medium bg-brand hover:bg-brand-dark">
-                    Inscription
-                  </Button>
-                </Link>
-              </div>
-            )}
+            {/* Mobile authentication buttons or user info */}
+            <div className="pt-4">
+              {user ? (
+                <div className="space-y-2">
+                  <div className="py-2 px-3 bg-muted rounded-lg">
+                    <p className="font-medium text-sm">{user.email}</p>
+                  </div>
+                  <Link to="/projets">
+                    <Button variant="ghost" className="w-full justify-start">
+                      Mes projets
+                    </Button>
+                  </Link>
+                  <Link to="/account">
+                    <Button variant="ghost" className="w-full justify-start">
+                      Mon compte
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex flex-col space-y-2">
+                  <Link to="/login">
+                    <Button variant="outline" className="w-full justify-center font-medium">
+                      Connexion
+                    </Button>
+                  </Link>
+                  <Link to="/signup">
+                    <Button className="w-full justify-center font-medium">
+                      Inscription
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

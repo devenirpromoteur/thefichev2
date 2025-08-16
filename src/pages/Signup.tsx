@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -8,38 +7,37 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Eye, EyeOff, Mail, Lock, Github } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Github, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { signInSchema, type SignInFormData } from '@/lib/validations/auth';
+import { signUpSchema, type SignUpFormData } from '@/lib/validations/auth';
 
-const Login = () => {
+const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  const { signIn, user } = useAuth();
+  const { signUp, user } = useAuth();
 
-  const form = useForm<SignInFormData>({
-    resolver: zodResolver(signInSchema),
+  const form = useForm<SignUpFormData>({
+    resolver: zodResolver(signUpSchema),
     defaultValues: {
       email: '',
       password: '',
+      confirmPassword: '',
+      fullName: '',
     },
   });
 
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate('/', { replace: true });
     }
-  }, [user, navigate, location]);
+  }, [user, navigate]);
 
-  const onSubmit = async (data: SignInFormData) => {
-    const { error } = await signIn(data.email, data.password);
+  const onSubmit = async (data: SignUpFormData) => {
+    const { error } = await signUp(data.email, data.password, data.fullName);
     
     if (!error) {
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
+      navigate('/login');
     }
   };
 
@@ -47,19 +45,43 @@ const Login = () => {
     setShowPassword(!showPassword);
   };
 
+  const password = form.watch('password');
+  const confirmPassword = form.watch('confirmPassword');
+  const passwordsMatch = password && confirmPassword && password === confirmPassword;
+
   return (
     <PageLayout className="flex justify-center items-center">
       <div className="w-full max-w-md px-4 animate-fade-in">
         <Card className="border-0 shadow-lg">
           <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl font-bold text-brand">Connexion</CardTitle>
+            <CardTitle className="text-2xl font-bold">Créer un compte</CardTitle>
             <CardDescription>
-              Entrez vos identifiants pour accéder à votre compte
+              Commencez votre analyse de faisabilité immobilière dès aujourd'hui
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nom complet</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                          <Input
+                            placeholder="Jean Dupont"
+                            className="pl-10"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="email"
@@ -70,6 +92,7 @@ const Login = () => {
                         <div className="relative">
                           <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                           <Input
+                            type="email"
                             placeholder="exemple@email.com"
                             className="pl-10"
                             {...field}
@@ -107,17 +130,36 @@ const Login = () => {
                     </FormItem>
                   )}
                 />
-                <div className="flex justify-end">
-                  <Link to="/reset-password" className="text-sm text-primary hover:underline">
-                    Mot de passe oublié?
-                  </Link>
-                </div>
+                <FormField
+                  control={form.control}
+                  name="confirmPassword"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Confirmer le mot de passe</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                          <Input
+                            type={showPassword ? "text" : "password"}
+                            className="pl-10 pr-10"
+                            {...field}
+                          />
+                          {passwordsMatch && (
+                            <CheckCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500 h-4 w-4" />
+                          )}
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
                 <Button
                   type="submit"
                   className="w-full"
                   disabled={form.formState.isSubmitting}
                 >
-                  {form.formState.isSubmitting ? "Connexion en cours..." : "Se connecter"}
+                  {form.formState.isSubmitting ? "Création en cours..." : "Créer un compte"}
                 </Button>
                 
                 <div className="relative">
@@ -138,13 +180,13 @@ const Login = () => {
           </CardContent>
           <CardFooter className="flex justify-center flex-col space-y-4">
             <div className="text-sm text-center text-muted-foreground">
-              Pas encore de compte?{" "}
-              <Link to="/signup" className="text-primary hover:underline font-medium">
-                S'inscrire
+              Déjà un compte?{" "}
+              <Link to="/login" className="text-primary hover:underline font-medium">
+                Se connecter
               </Link>
             </div>
             <div className="text-xs text-center text-muted-foreground">
-              En vous connectant, vous acceptez nos{" "}
+              En vous inscrivant, vous acceptez nos{" "}
               <Link to="/terms" className="text-primary hover:underline">
                 Conditions d'utilisation
               </Link>{" "}
@@ -160,4 +202,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default Signup;

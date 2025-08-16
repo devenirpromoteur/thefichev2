@@ -22,7 +22,6 @@ export type Database = {
           present: boolean
           project_id: string
           type: string
-          type_key: string
           updated_at: string
         }
         Insert: {
@@ -32,7 +31,6 @@ export type Database = {
           present?: boolean
           project_id: string
           type: string
-          type_key: string
           updated_at?: string
         }
         Update: {
@@ -42,42 +40,9 @@ export type Database = {
           present?: boolean
           project_id?: string
           type?: string
-          type_key?: string
           updated_at?: string
         }
         Relationships: []
-      }
-      plu_servitudes: {
-        Row: {
-          created_at: string
-          id: string
-          notes: string | null
-          project_id: string
-          type_key: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          project_id: string
-          type_key: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          project_id?: string
-          type_key?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "plu_servitudes_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       profiles: {
         Row: {

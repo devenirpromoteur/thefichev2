@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Check, ChevronsUpDown, X, Search, CheckCheck, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, ChevronsUpDown, X, Search, CheckCheck, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,83 +11,82 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
 const servitudesSchema = z.array(z.string().min(2)).max(20);
 
 const SERVITUDES_OPTIONS = [
   { 
-    type_key: 'PAPAG', 
+    value: 'papag', 
     label: 'PAPAG',
     description: 'Périmètres d\'Aménagement Programmé',
     requiresNote: false
   },
   { 
-    type_key: 'ABF', 
+    value: 'monuments_abf', 
     label: 'Monuments/ABF',
     description: 'Monuments Historiques et Architecte des Bâtiments de France',
     requiresNote: false,
     isAlert: true
   },
   { 
-    type_key: 'EBC', 
+    value: 'protection_vegetale', 
     label: 'Protection végétale (EBC…)',
     description: 'Espaces Boisés Classés et autres protections végétales',
     requiresNote: false
   },
   { 
-    type_key: 'EMPL_RESERVES', 
+    value: 'emplacements_reserves', 
     label: 'Emplacements réservés',
     description: 'Emplacements réservés aux voies et ouvrages publics',
     requiresNote: true,
     placeholder: 'Ex: ER 1, ER 15...'
   },
   { 
-    type_key: 'VOIES_EMPRISES', 
+    value: 'voies_emprises', 
     label: 'Voies & emprises publiques',
     description: 'Servitudes de voies et d\'emprises publiques',
     requiresNote: false
   },
   { 
-    type_key: 'MIXITE_SOCIALE', 
+    value: 'mixite_sociale', 
     label: 'Mixité sociale',
     description: 'Obligations de mixité sociale',
     requiresNote: false
   },
   { 
-    type_key: 'NON_AEDIFICANDI', 
+    value: 'non_aedificandi', 
     label: 'Non aedificandi',
     description: 'Interdiction de construire',
     requiresNote: false,
     isAlert: true
   },
   { 
-    type_key: 'MARGE_RECUL', 
+    value: 'ligne_marge_recul', 
     label: 'Ligne/marge de recul',
     description: 'Lignes et marges de recul obligatoires',
     requiresNote: true,
     placeholder: 'Ex: 5 m, 10 m...'
   },
   { 
-    type_key: 'CONTINUITE', 
+    value: 'continuite_discontinuite', 
     label: 'Continuité/discontinuité',
     description: 'Obligations de continuité ou discontinuité urbaine',
     requiresNote: false
   },
   { 
-    type_key: 'POLYGONE_IMPL', 
+    value: 'polygone_implantation', 
     label: 'Polygone d\'implantation',
     description: 'Polygones d\'implantation obligatoire',
     requiresNote: false
   },
   { 
-    type_key: 'PASSAGE', 
+    value: 'passage', 
     label: 'Passage',
     description: 'Servitudes de passage',
     requiresNote: false
   },
   { 
-    type_key: 'PPRN', 
+    value: 'risques_naturels', 
     label: 'Risques naturels (PPRN/PPRI/PPRT/PPRM)',
     description: 'Plans de Prévention des Risques',
     requiresNote: false,
@@ -101,206 +100,201 @@ interface ServitudesMultiSelectProps {
 }
 
 interface ServitudeData {
-  type_key: string;
+  type: string;
+  present: boolean;
   notes?: string;
 }
-
-// Helper to validate UUID
-const isValidUUID = (str: string) => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
-};
 
 export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   projectId,
   disabled = false
 }) => {
   const [open, setOpen] = useState(false);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  const [notesByKey, setNotesByKey] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<string[]>([]);
+  const [notesByType, setNotesByType] = useState<Record<string, string>>({});
   const [customServitude, setCustomServitude] = useState('');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  // Validate required conditions
-  if (!projectId || !isValidUUID(projectId)) {
-    return (
-      <div className="space-y-2">
-        <label className="block text-sm font-medium mb-1">Servitudes</label>
-        <div className="p-3 text-sm text-muted-foreground bg-muted/30 rounded-md">
-          Projet requis pour enregistrer les servitudes
-        </div>
-      </div>
-    );
-  }
+  // Load existing servitudes
+  useEffect(() => {
+    loadServitudes();
+  }, [projectId]);
 
-  // Load servitudes with React Query  
-  const { data: servitudesData = [] } = useQuery({
-    queryKey: ['plu-servitudes', projectId],
-    queryFn: async () => {
+  const loadServitudes = async () => {
+    try {
+      setLoading(true);
       const { data, error } = await supabase
-        .from('plu_servitudes')
-        .select('type_key, notes')
+        .from('cadastre_servitudes')
+        .select('type, present, notes')
+        .eq('project_id', projectId)
+        .eq('present', true);
+
+      if (error) throw error;
+
+      const selectedTypes = data?.map(item => item.type) || [];
+      const notes = data?.reduce((acc, item) => {
+        if (item.notes) acc[item.type] = item.notes;
+        return acc;
+      }, {} as Record<string, string>) || {};
+
+      setSelected(selectedTypes);
+      setNotesByType(notes);
+    } catch (error) {
+      console.error('Error loading servitudes:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les servitudes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveServitudes = async () => {
+    try {
+      // Validate selection
+      const validation = servitudesSchema.safeParse(selected);
+      if (!validation.success) {
+        toast({
+          title: "Validation",
+          description: "Nombre de servitudes invalide (max 20)",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setSaving(true);
+
+      // Get all existing servitudes for this project
+      const { data: existing } = await supabase
+        .from('cadastre_servitudes')
+        .select('type')
         .eq('project_id', projectId);
 
-      if (error) {
-        console.error('Load servitudes error:', { code: error.code, message: error.message });
-        throw error;
+      const existingTypes = existing?.map(item => item.type) || [];
+
+      // Delete deselected servitudes
+      const toDelete = existingTypes.filter(type => !selected.includes(type));
+      if (toDelete.length > 0) {
+        const { error } = await supabase
+          .from('cadastre_servitudes')
+          .delete()
+          .eq('project_id', projectId)
+          .in('type', toDelete);
+
+        if (error) throw error;
       }
 
-      return data || [];
-    },
-    staleTime: 60000,
-    retry: 1,
-    refetchOnWindowFocus: false,
-    enabled: !!projectId
-  });
+      // Upsert selected servitudes
+      for (const type of selected) {
+        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === type);
+        const notes = notesByType[type];
 
-  // Add servitude mutation
-  const addServitudeMutation = useMutation({
-    mutationFn: async (type_key: string) => {
-      console.log('Adding servitude:', { project_id: projectId, type_key });
-      const { data, error } = await supabase
-        .from('plu_servitudes')
-        .upsert({ 
-          project_id: projectId, 
-          type_key,
-          notes: notesByKey[type_key]?.trim() || null
-        }, { onConflict: 'project_id,type_key' })
-        .select('id')
-        .single();
-      
-      if (error) {
-        console.error('Add servitude error:', { code: error.code, message: error.message });
-        throw error;
+        // Validate required notes
+        if (servitudeOption?.requiresNote && !notes?.trim()) {
+          toast({
+            title: "Information manquante",
+            description: `Veuillez renseigner une valeur pour "${servitudeOption.label}"`,
+            variant: "destructive",
+          });
+          setSaving(false);
+          return;
+        }
+
+        const { error } = await supabase
+          .from('cadastre_servitudes')
+          .upsert({
+            project_id: projectId,
+            type,
+            present: true,
+            notes: notes?.trim() || null
+          });
+
+        if (error) throw error;
       }
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plu-servitudes', projectId] });
-    },
-    onError: (error: any) => {
-      console.error('Add servitude mutation error:', error);
+
       toast({
-        title: "Erreur d'ajout",
-        description: `Impossible d'ajouter la servitude: ${error.message}`,
+        title: "Sauvegarde réussie",
+        description: "Les servitudes ont été mises à jour",
+      });
+
+    } catch (error) {
+      console.error('Error saving servitudes:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de sauvegarder les servitudes",
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
-  });
-
-  // Remove servitude mutation
-  const removeServitudeMutation = useMutation({
-    mutationFn: async (type_key: string) => {
-      console.log('Removing servitude:', { project_id: projectId, type_key });
-      const { error } = await supabase
-        .from('plu_servitudes')
-        .delete()
-        .eq('project_id', projectId)
-        .eq('type_key', type_key);
-      
-      if (error) {
-        console.error('Remove servitude error:', { code: error.code, message: error.message });
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['plu-servitudes', projectId] });
-    },
-    onError: (error: any) => {
-      console.error('Remove servitude mutation error:', error);
-      toast({
-        title: "Erreur de suppression",
-        description: `Impossible de supprimer la servitude: ${error.message}`,
-        variant: "destructive",
-      });
-    }
-  });
-
-  // Update local state when data changes
-  useEffect(() => {
-    const selectedTypeKeys = new Set(servitudesData.map(item => item.type_key));
-    const notes = servitudesData.reduce((acc, item) => {
-      if (item.notes) acc[item.type_key] = item.notes;
-      return acc;
-    }, {} as Record<string, string>);
-
-    setSelectedKeys(selectedTypeKeys);
-    setNotesByKey(notes);
-  }, [servitudesData]);
-
+  };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-  };
-
-  const toggleServitude = (type_key: string) => {
-    const isCurrentlySelected = selectedKeys.has(type_key);
-    const newSelectedKeys = new Set(selectedKeys);
-    
-    if (isCurrentlySelected) {
-      newSelectedKeys.delete(type_key);
-      setSelectedKeys(newSelectedKeys);
-      removeServitudeMutation.mutate(type_key);
-    } else {
-      newSelectedKeys.add(type_key);
-      setSelectedKeys(newSelectedKeys);
-      addServitudeMutation.mutate(type_key);
+    if (!newOpen && !saving) {
+      saveServitudes();
     }
   };
 
-  const handleNoteChange = (type_key: string, note: string) => {
-    setNotesByKey(prev => ({
+  const handleSelect = (value: string) => {
+    setSelected(prev => 
+      prev.includes(value) 
+        ? prev.filter(item => item !== value)
+        : [...prev, value]
+    );
+  };
+
+  const handleNoteChange = (type: string, note: string) => {
+    setNotesByType(prev => ({
       ...prev,
-      [type_key]: note
+      [type]: note
     }));
   };
 
   const handleSelectAll = () => {
-    const allKeys = SERVITUDES_OPTIONS.map(opt => opt.type_key);
-    const newSelectedKeys = new Set(allKeys);
-    setSelectedKeys(newSelectedKeys);
-    // Add missing servitudes
-    allKeys.forEach(type_key => {
-      if (!selectedKeys.has(type_key)) {
-        addServitudeMutation.mutate(type_key);
-      }
-    });
+    const allValues = SERVITUDES_OPTIONS.map(opt => opt.value);
+    setSelected(allValues);
   };
 
   const handleClearAll = () => {
-    const toRemove = Array.from(selectedKeys);
-    setSelectedKeys(new Set());
-    setNotesByKey({});
-    // Remove all servitudes
-    toRemove.forEach(type_key => {
-      removeServitudeMutation.mutate(type_key);
-    });
+    setSelected([]);
+    setNotesByType({});
   };
 
   const handleAddCustom = () => {
-    if (customServitude.trim()) {
-      const type_key = customServitude.toUpperCase().replace(/[^A-Z0-9]/g, '_');
-      const newSelectedKeys = new Set(selectedKeys);
-      newSelectedKeys.add(type_key);
-      setSelectedKeys(newSelectedKeys);
+    if (customServitude.trim() && !selected.includes(customServitude.trim())) {
+      setSelected(prev => [...prev, customServitude.trim()]);
       setCustomServitude('');
       setIsAddingCustom(false);
-      addServitudeMutation.mutate(type_key);
     }
   };
 
-  const handleRemoveServitude = (type_key: string) => {
-    const newSelectedKeys = new Set(selectedKeys);
-    newSelectedKeys.delete(type_key);
-    setSelectedKeys(newSelectedKeys);
-    setNotesByKey(prev => {
-      const { [type_key]: _, ...rest } = prev;
+  const handleRemoveServitude = (value: string) => {
+    setSelected(prev => prev.filter(item => item !== value));
+    setNotesByType(prev => {
+      const { [value]: _, ...rest } = prev;
       return rest;
     });
-    removeServitudeMutation.mutate(type_key);
   };
+
+  const getServitudeLabel = (value: string) => {
+    const option = SERVITUDES_OPTIONS.find(opt => opt.value === value);
+    return option?.label || value;
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <label className="block text-sm font-medium mb-1">Servitudes</label>
+        <div className="h-10 bg-muted animate-pulse rounded-md"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -327,12 +321,12 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               disabled && "cursor-not-allowed opacity-50",
               open && "ring-2 ring-[#4F3CE7] border-[#4F3CE7]"
             )}
-            disabled={disabled || addServitudeMutation.isPending || removeServitudeMutation.isPending}
+            disabled={disabled}
           >
             <span className="truncate">
-              {selectedKeys.size === 0 
+              {selected.length === 0 
                 ? "Sélectionner les servitudes" 
-                : `Servitudes (${selectedKeys.size} sélectionnées)`
+                : `Servitudes (${selected.length} sélectionnées)`
               }
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -353,7 +347,6 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                   size="sm"
                   onClick={handleSelectAll}
                   className="h-7 text-xs"
-                  disabled={addServitudeMutation.isPending || removeServitudeMutation.isPending}
                 >
                   <CheckCheck className="w-3 h-3 mr-1" />
                   Tout sélectionner
@@ -363,14 +356,13 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                   size="sm"
                   onClick={handleClearAll}
                   className="h-7 text-xs"
-                  disabled={addServitudeMutation.isPending || removeServitudeMutation.isPending}
                 >
                   <Trash2 className="w-3 h-3 mr-1" />
                   Effacer
                 </Button>
               </div>
               <span className="text-xs text-muted-foreground">
-                {selectedKeys.size}/20
+                {selected.length}/20
               </span>
             </div>
 
@@ -379,18 +371,14 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               
               {SERVITUDES_OPTIONS.map((option) => (
                 <CommandItem
-                  key={option.type_key}
-                  value={option.type_key}
-                  onSelect={(e) => {
-                    // Prevent popover from closing
-                  }}
-                  className="flex items-start gap-2 p-3 cursor-pointer"
-                  onClick={() => toggleServitude(option.type_key)}
+                  key={option.value}
+                  value={option.value}
+                  onSelect={() => handleSelect(option.value)}
+                  className="flex items-start gap-2 p-3"
                 >
                   <Checkbox
-                    checked={selectedKeys.has(option.type_key)}
-                    onCheckedChange={() => toggleServitude(option.type_key)}
-                    onPointerDown={(e) => e.preventDefault()}
+                    checked={selected.includes(option.value)}
+                    onChange={() => handleSelect(option.value)}
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">
@@ -404,11 +392,11 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                         {option.description}
                       </p>
                     )}
-                    {selectedKeys.has(option.type_key) && option.requiresNote && (
+                    {selected.includes(option.value) && option.requiresNote && (
                       <Input
-                        placeholder={option.placeholder || ''}
-                        value={notesByKey[option.type_key] || ''}
-                        onChange={(e) => handleNoteChange(option.type_key, e.target.value)}
+                        placeholder={option.placeholder}
+                        value={notesByType[option.value] || ''}
+                        onChange={(e) => handleNoteChange(option.value, e.target.value)}
                         className="h-7 text-xs mt-2"
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -472,29 +460,25 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
       </Popover>
 
       {/* Selected servitudes as chips */}
-      {selectedKeys.size > 0 && (
+      {selected.length > 0 && (
         <div className="flex flex-wrap gap-1 p-2 bg-muted/30 rounded-md">
-          {Array.from(selectedKeys).map((type_key) => {
-            const option = SERVITUDES_OPTIONS.find(opt => opt.type_key === type_key);
-            const label = option?.label || type_key;
-            return (
-              <Badge
-                key={type_key}
-                variant="secondary"
-                className="text-xs flex items-center gap-1"
-              >
-                {label}
-                {!disabled && (
-                  <button
-                    onClick={() => handleRemoveServitude(type_key)}
-                    className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
-                  >
-                    <X className="w-2 h-2" />
-                  </button>
-                )}
-              </Badge>
-            );
-          })}
+          {selected.map((value) => (
+            <Badge
+              key={value}
+              variant="secondary"
+              className="text-xs flex items-center gap-1"
+            >
+              {getServitudeLabel(value)}
+              {!disabled && (
+                <button
+                  onClick={() => handleRemoveServitude(value)}
+                  className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
+                >
+                  <X className="w-2 h-2" />
+                </button>
+              )}
+            </Badge>
+          ))}
         </div>
       )}
     </div>

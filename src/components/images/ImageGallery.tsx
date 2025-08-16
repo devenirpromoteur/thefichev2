@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Image, ImagePlus, Trash2 } from 'lucide-react';
+import { Image, ImagePlus, Trash2, MapPin } from 'lucide-react';
 import ImageUploader from './ImageUploader';
 import ImagePreview from './ImagePreview';
 
@@ -31,10 +31,11 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ ficheId, readOnly = 
 
   // Catégories d'images
   const categories = [
-    { id: 'aerial', label: 'Vues aériennes' },
-    { id: 'street', label: 'Accès rue' },
-    { id: 'neighborhood', label: 'Voisinage' },
-    { id: 'site', label: 'Photos du site' }
+    { id: 'aerial', label: 'Vues aériennes', icon: Image },
+    { id: 'street', label: 'Accès rue', icon: Image },
+    { id: 'neighborhood', label: 'Voisinage', icon: Image },
+    { id: 'site', label: 'Photos du site', icon: Image },
+    { id: 'geoportail', label: 'Géoportail', icon: MapPin }
   ];
 
   useEffect(() => {
@@ -177,17 +178,20 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ ficheId, readOnly = 
         
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="p-4 bg-gray-50 border-b">
-            <TabsList className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {categories.map(category => (
-                <TabsTrigger 
-                  key={category.id}
-                  value={category.id}
-                  className="flex gap-2 items-center"
-                >
-                  <Image className="h-4 w-4" />
-                  {category.label}
-                </TabsTrigger>
-              ))}
+            <TabsList className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {categories.map(category => {
+                const IconComponent = category.icon;
+                return (
+                  <TabsTrigger 
+                    key={category.id}
+                    value={category.id}
+                    className="flex gap-2 items-center"
+                  >
+                    <IconComponent className="h-4 w-4" />
+                    {category.label}
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
           </div>
           

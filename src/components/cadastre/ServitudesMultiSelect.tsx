@@ -126,17 +126,35 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   const loadServitudes = async () => {
     try {
       setLoading(true);
+      
+      // Validate projectId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(projectId)) {
+        console.warn('Invalid project ID format:', projectId);
+        setSelected([]);
+        setNotesByType({});
+        return;
+      }
+
+      // Check authentication
+      const { data: { session }, error: authError } = await supabase.auth.getSession();
+      if (authError) throw authError;
+      if (!session) {
+        console.warn('No authenticated session');
+        return;
+      }
+
       const { data, error } = await supabase
-        .from('cadastre_servitudes')
-        .select('type, present, notes')
+        .from('plu_servitudes')
+        .select('type_key, notes')
         .eq('project_id', projectId)
-        .eq('present', true);
+        .order('type_key');
 
       if (error) throw error;
 
-      const selectedTypes = data?.map(item => item.type) || [];
+      const selectedTypes = data?.map(item => item.type_key) || [];
       const notes = data?.reduce((acc, item) => {
-        if (item.notes) acc[item.type] = item.notes;
+        if (item.notes) acc[item.type_key] = item.notes;
         return acc;
       }, {} as Record<string, string>) || {};
 
@@ -154,99 +172,52 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     }
   };
 
-  const saveServitudes = async () => {
+  const saveServitude = async (typeKey: string, isSelected: boolean) => {
+    const notes = notesByType[typeKey]?.trim() || null;
+    
+    if (isSelected) {
+      await supabase
+        .from('plu_servitudes')
+        .upsert(
+          { project_id: projectId, type_key: typeKey, notes },
+          { onConflict: 'project_id,type_key' }
+        )
+        .select('id')
+        .single()
+        .throwOnError();
+    } else {
+      await supabase
+        .from('plu_servitudes')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('type_key', typeKey)
+        .throwOnError();
+    }
+  };
+
+  const toggle = async (key: string, willSelect: boolean) => {
+    // Optimistic update
+    setSelected(prev => willSelect ? [...prev, key] : prev.filter(x => x !== key));
+    
     try {
-      // Validate selection
-      const validation = servitudesSchema.safeParse(selected);
-      if (!validation.success) {
-        toast({
-          title: "Validation",
-          description: "Nombre de servitudes invalide (max 20)",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setSaving(true);
-
-      // Get all existing servitudes for this project
-      const { data: existing } = await supabase
-        .from('cadastre_servitudes')
-        .select('type')
-        .eq('project_id', projectId);
-
-      const existingTypes = existing?.map(item => item.type) || [];
-
-      // Delete deselected servitudes
-      const toDelete = existingTypes.filter(type => !selected.includes(type));
-      if (toDelete.length > 0) {
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .delete()
-          .eq('project_id', projectId)
-          .in('type', toDelete);
-
-        if (error) throw error;
-      }
-
-      // Upsert selected servitudes
-      for (const type of selected) {
-        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === type);
-        const notes = notesByType[type];
-
-        // Validate required notes
-        if (servitudeOption?.requiresNote && !notes?.trim()) {
-          toast({
-            title: "Information manquante",
-            description: `Veuillez renseigner une valeur pour "${servitudeOption.label}"`,
-            variant: "destructive",
-          });
-          setSaving(false);
-          return;
-        }
-
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .upsert({
-            project_id: projectId,
-            type,
-            present: true,
-            notes: notes?.trim() || null
-          });
-
-        if (error) throw error;
-      }
-
-      toast({
-        title: "Sauvegarde réussie",
-        description: "Les servitudes ont été mises à jour",
-      });
-
+      await saveServitude(key, willSelect);
+      // Reload to ensure consistency
+      await loadServitudes();
     } catch (error) {
-      console.error('Error saving servitudes:', error);
+      // Rollback on error
+      setSelected(prev => willSelect ? prev.filter(x => x !== key) : [...prev, key]);
+      console.error('Error toggling servitude:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de sauvegarder les servitudes",
+        description: "Impossible de sauvegarder la servitude",
         variant: "destructive",
       });
-    } finally {
-      setSaving(false);
+      throw error;
     }
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    if (!newOpen && !saving) {
-      saveServitudes();
-    }
-  };
-
-  const handleSelect = (value: string) => {
-    setSelected(prev => 
-      prev.includes(value) 
-        ? prev.filter(item => item !== value)
-        : [...prev, value]
-    );
   };
 
   const handleNoteChange = (type: string, note: string) => {
@@ -256,30 +227,99 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     }));
   };
 
-  const handleSelectAll = () => {
+  const handleSelectAll = async () => {
     const allValues = SERVITUDES_OPTIONS.map(opt => opt.value);
+    const toAdd = allValues.filter(v => !selected.includes(v));
+    
+    if (!toAdd.length) return;
+    
+    // Optimistic update
     setSelected(allValues);
-  };
-
-  const handleClearAll = () => {
-    setSelected([]);
-    setNotesByType({});
-  };
-
-  const handleAddCustom = () => {
-    if (customServitude.trim() && !selected.includes(customServitude.trim())) {
-      setSelected(prev => [...prev, customServitude.trim()]);
-      setCustomServitude('');
-      setIsAddingCustom(false);
+    
+    try {
+      await supabase
+        .from('plu_servitudes')
+        .upsert(
+          toAdd.map(v => ({
+            project_id: projectId,
+            type_key: v,
+            notes: notesByType[v]?.trim() || null
+          })),
+          { onConflict: 'project_id,type_key' }
+        )
+        .throwOnError();
+      
+      // Reload to ensure consistency
+      await loadServitudes();
+    } catch (error) {
+      // Rollback on error
+      setSelected(prev => prev.filter(v => !toAdd.includes(v)));
+      console.error('Error selecting all servitudes:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de sélectionner toutes les servitudes",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleRemoveServitude = (value: string) => {
-    setSelected(prev => prev.filter(item => item !== value));
-    setNotesByType(prev => {
-      const { [value]: _, ...rest } = prev;
-      return rest;
-    });
+  const handleClearAll = async () => {
+    const prevSelected = [...selected];
+    const prevNotes = { ...notesByType };
+    
+    // Optimistic update
+    setSelected([]);
+    setNotesByType({});
+    
+    try {
+      await supabase
+        .from('plu_servitudes')
+        .delete()
+        .eq('project_id', projectId)
+        .throwOnError();
+      
+      // Reload to ensure consistency
+      await loadServitudes();
+    } catch (error) {
+      // Rollback on error
+      setSelected(prevSelected);
+      setNotesByType(prevNotes);
+      console.error('Error clearing servitudes:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'effacer les servitudes",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddCustom = async () => {
+    const key = customServitude.trim();
+    if (!key || selected.includes(key)) return;
+    
+    try {
+      await saveServitude(key, true);
+      setSelected(prev => [...prev, key]);
+      setCustomServitude('');
+      setIsAddingCustom(false);
+      // Reload to ensure consistency
+      await loadServitudes();
+    } catch (error) {
+      console.error('Error adding custom servitude:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter la servitude personnalisée",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveServitude = async (value: string) => {
+    try {
+      await toggle(value, false);
+    } catch (error) {
+      // Error already handled in toggle function
+    }
   };
 
   const getServitudeLabel = (value: string) => {
@@ -333,7 +373,11 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
           </Button>
         </PopoverTrigger>
         
-        <PopoverContent className="w-[400px] p-0" align="start">
+        <PopoverContent 
+          className="w-[400px] p-0" 
+          align="start"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
           <Command>
             <div className="flex items-center border-b px-3" cmdk-input-wrapper="">
               <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
@@ -372,13 +416,16 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
               {SERVITUDES_OPTIONS.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.value}
-                  onSelect={() => handleSelect(option.value)}
+                  value={`${option.label} ${option.description ?? ''}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggle(option.value, !selected.includes(option.value))}
                   className="flex items-start gap-2 p-3"
                 >
                   <Checkbox
                     checked={selected.includes(option.value)}
-                    onChange={() => handleSelect(option.value)}
+                    onCheckedChange={(v) => toggle(option.value, !!v)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.preventDefault()}
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">

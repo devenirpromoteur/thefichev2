@@ -163,67 +163,60 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const saveServitude = async (typeKey: string, isSelected: boolean) => {
+    // Validate projectId is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(projectId)) {
+      console.error('Invalid projectId format:', projectId);
+      throw new Error('ID de projet invalide');
+    }
+
+    if (isSelected) {
+      // Validate required notes
+      const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === typeKey);
+      const notes = notesByType[typeKey];
+      
+      if (servitudeOption?.requiresNote && !notes?.trim()) {
+        throw new Error(`Veuillez renseigner une valeur pour "${servitudeOption.label}"`);
+      }
+
+      await (supabase as any)
+        .from('plu_servitudes')
+        .upsert({
+          project_id: projectId,
+          type_key: typeKey,
+          notes: notes?.trim() || null
+        }, { 
+          onConflict: 'project_id,type_key' 
+        })
+        .select('id').single();
+    } else {
+      await (supabase as any)
+        .from('plu_servitudes')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('type_key', typeKey);
+    }
+  };
+
+  const toggle = async (key: string, willSelect: boolean) => {
+    // Optimistic update
+    setSelected(prev => willSelect ? [...prev, key] : prev.filter(x => x !== key));
+    
     try {
-      // Validate projectId is a valid UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(projectId)) {
-        console.error('Invalid projectId format:', projectId);
+      await saveServitude(key, willSelect);
+    } catch (error) {
+      // Rollback on error
+      console.error('Error toggling servitude:', error);
+      setSelected(prev => willSelect ? prev.filter(x => x !== key) : [...prev, key]);
+      
+      // Only toast user-facing validation errors
+      if (error instanceof Error && error.message !== 'ID de projet invalide') {
         toast({
           title: "Erreur",
-          description: "ID de projet invalide",
+          description: error.message,
           variant: "destructive",
         });
-        return;
       }
-
-      if (isSelected) {
-        // Validate required notes
-        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === typeKey);
-        const notes = notesByType[typeKey];
-        
-        if (servitudeOption?.requiresNote && !notes?.trim()) {
-          toast({
-            title: "Information manquante",
-            description: `Veuillez renseigner une valeur pour "${servitudeOption.label}"`,
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const { error } = await (supabase as any)
-          .from('plu_servitudes')
-          .upsert({
-            project_id: projectId,
-            type_key: typeKey,
-            notes: notes?.trim() || null
-          }, { 
-            onConflict: 'project_id,type_key' 
-          });
-
-        if (error) throw error;
-      } else {
-        const { error } = await (supabase as any)
-          .from('plu_servitudes')
-          .delete()
-          .eq('project_id', projectId)
-          .eq('type_key', typeKey);
-
-        if (error) throw error;
-      }
-
-    } catch (error) {
-      console.error('Error saving servitude:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de sauvegarder la servitude",
-        variant: "destructive",
-      });
-      // Revert optimistic update
-      setSelected(prev => 
-        isSelected 
-          ? prev.filter(item => item !== typeKey)
-          : [...prev, typeKey]
-      );
     }
   };
 
@@ -232,18 +225,8 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const handleSelect = (value: string) => {
-    const isCurrentlySelected = selected.includes(value);
-    const willBeSelected = !isCurrentlySelected;
-    
-    // Optimistic update
-    setSelected(prev => 
-      willBeSelected
-        ? [...prev, value]
-        : prev.filter(item => item !== value)
-    );
-    
-    // Save immediately
-    saveServitude(value, willBeSelected);
+    toggle(value, !selected.includes(value));
+    setOpen(true);
   };
 
   const handleNoteChange = (type: string, note: string) => {
@@ -253,14 +236,63 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     }));
   };
 
-  const handleSelectAll = () => {
+  const handleSelectAll = async () => {
     const allValues = SERVITUDES_OPTIONS.map(opt => opt.value);
-    setSelected(allValues);
+    const toAdd = allValues.filter(v => !selected.includes(v));
+    
+    if (toAdd.length) {
+      // Optimistic update
+      setSelected(allValues);
+      
+      try {
+        await (supabase as any)
+          .from('plu_servitudes')
+          .upsert(
+            toAdd.map(v => ({ 
+              project_id: projectId, 
+              type_key: v, 
+              notes: notesByType[v]?.trim() || null 
+            })),
+            { onConflict: 'project_id,type_key' }
+          );
+      } catch (error) {
+        console.error('Error selecting all servitudes:', error);
+        // Rollback on error
+        setSelected(prev => prev.filter(v => !toAdd.includes(v)));
+        toast({
+          title: "Erreur",
+          description: "Impossible de sélectionner toutes les servitudes",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
+    if (selected.length === 0) return;
+    
+    // Optimistic update
+    const previousSelected = [...selected];
+    const previousNotes = { ...notesByType };
     setSelected([]);
     setNotesByType({});
+    
+    try {
+      await (supabase as any)
+        .from('plu_servitudes')
+        .delete()
+        .eq('project_id', projectId);
+    } catch (error) {
+      console.error('Error clearing all servitudes:', error);
+      // Rollback on error
+      setSelected(previousSelected);
+      setNotesByType(previousNotes);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'effacer les servitudes",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAddCustom = () => {
@@ -272,15 +304,11 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const handleRemoveServitude = (value: string) => {
-    // Optimistic update
-    setSelected(prev => prev.filter(item => item !== value));
+    toggle(value, false);
     setNotesByType(prev => {
       const { [value]: _, ...rest } = prev;
       return rest;
     });
-    
-    // Save immediately
-    saveServitude(value, false);
   };
 
   const getServitudeLabel = (value: string) => {
@@ -374,12 +402,14 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                 <CommandItem
                   key={option.value}
                   value={option.value}
-                  onSelect={() => handleSelect(option.value)}
+                  onSelect={() => { toggle(option.value, !selected.includes(option.value)); setOpen(true); }}
                   className="flex items-start gap-2 p-3"
                 >
                   <Checkbox
                     checked={selected.includes(option.value)}
-                    onCheckedChange={() => handleSelect(option.value)}
+                    onCheckedChange={(v) => toggle(option.value, !!v)}
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.preventDefault()}
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">

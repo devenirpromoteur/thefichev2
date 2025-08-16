@@ -126,17 +126,25 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   const loadServitudes = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('cadastre_servitudes')
-        .select('type, present, notes')
-        .eq('project_id', projectId)
-        .eq('present', true);
+      
+      // Validate projectId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(projectId)) {
+        console.error('Invalid projectId format:', projectId);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await (supabase as any)
+        .from('plu_servitudes')
+        .select('type_key, notes')
+        .eq('project_id', projectId);
 
       if (error) throw error;
 
-      const selectedTypes = data?.map(item => item.type) || [];
+      const selectedTypes = data?.map(item => item.type_key) || [];
       const notes = data?.reduce((acc, item) => {
-        if (item.notes) acc[item.type] = item.notes;
+        if (item.notes) acc[item.type_key] = item.notes;
         return acc;
       }, {} as Record<string, string>) || {};
 
@@ -154,99 +162,88 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
     }
   };
 
-  const saveServitudes = async () => {
+  const saveServitude = async (typeKey: string, isSelected: boolean) => {
     try {
-      // Validate selection
-      const validation = servitudesSchema.safeParse(selected);
-      if (!validation.success) {
+      // Validate projectId is a valid UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(projectId)) {
+        console.error('Invalid projectId format:', projectId);
         toast({
-          title: "Validation",
-          description: "Nombre de servitudes invalide (max 20)",
+          title: "Erreur",
+          description: "ID de projet invalide",
           variant: "destructive",
         });
         return;
       }
 
-      setSaving(true);
-
-      // Get all existing servitudes for this project
-      const { data: existing } = await supabase
-        .from('cadastre_servitudes')
-        .select('type')
-        .eq('project_id', projectId);
-
-      const existingTypes = existing?.map(item => item.type) || [];
-
-      // Delete deselected servitudes
-      const toDelete = existingTypes.filter(type => !selected.includes(type));
-      if (toDelete.length > 0) {
-        const { error } = await supabase
-          .from('cadastre_servitudes')
-          .delete()
-          .eq('project_id', projectId)
-          .in('type', toDelete);
-
-        if (error) throw error;
-      }
-
-      // Upsert selected servitudes
-      for (const type of selected) {
-        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === type);
-        const notes = notesByType[type];
-
+      if (isSelected) {
         // Validate required notes
+        const servitudeOption = SERVITUDES_OPTIONS.find(opt => opt.value === typeKey);
+        const notes = notesByType[typeKey];
+        
         if (servitudeOption?.requiresNote && !notes?.trim()) {
           toast({
             title: "Information manquante",
             description: `Veuillez renseigner une valeur pour "${servitudeOption.label}"`,
             variant: "destructive",
           });
-          setSaving(false);
           return;
         }
 
-        const { error } = await supabase
-          .from('cadastre_servitudes')
+        const { error } = await (supabase as any)
+          .from('plu_servitudes')
           .upsert({
             project_id: projectId,
-            type,
-            present: true,
+            type_key: typeKey,
             notes: notes?.trim() || null
+          }, { 
+            onConflict: 'project_id,type_key' 
           });
+
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('plu_servitudes')
+          .delete()
+          .eq('project_id', projectId)
+          .eq('type_key', typeKey);
 
         if (error) throw error;
       }
 
-      toast({
-        title: "Sauvegarde réussie",
-        description: "Les servitudes ont été mises à jour",
-      });
-
     } catch (error) {
-      console.error('Error saving servitudes:', error);
+      console.error('Error saving servitude:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de sauvegarder les servitudes",
+        description: "Impossible de sauvegarder la servitude",
         variant: "destructive",
       });
-    } finally {
-      setSaving(false);
+      // Revert optimistic update
+      setSelected(prev => 
+        isSelected 
+          ? prev.filter(item => item !== typeKey)
+          : [...prev, typeKey]
+      );
     }
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    if (!newOpen && !saving) {
-      saveServitudes();
-    }
   };
 
   const handleSelect = (value: string) => {
+    const isCurrentlySelected = selected.includes(value);
+    const willBeSelected = !isCurrentlySelected;
+    
+    // Optimistic update
     setSelected(prev => 
-      prev.includes(value) 
-        ? prev.filter(item => item !== value)
-        : [...prev, value]
+      willBeSelected
+        ? [...prev, value]
+        : prev.filter(item => item !== value)
     );
+    
+    // Save immediately
+    saveServitude(value, willBeSelected);
   };
 
   const handleNoteChange = (type: string, note: string) => {
@@ -275,11 +272,15 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
   };
 
   const handleRemoveServitude = (value: string) => {
+    // Optimistic update
     setSelected(prev => prev.filter(item => item !== value));
     setNotesByType(prev => {
       const { [value]: _, ...rest } = prev;
       return rest;
     });
+    
+    // Save immediately
+    saveServitude(value, false);
   };
 
   const getServitudeLabel = (value: string) => {
@@ -378,7 +379,7 @@ export const ServitudesMultiSelect: React.FC<ServitudesMultiSelectProps> = ({
                 >
                   <Checkbox
                     checked={selected.includes(option.value)}
-                    onChange={() => handleSelect(option.value)}
+                    onCheckedChange={() => handleSelect(option.value)}
                   />
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-2">

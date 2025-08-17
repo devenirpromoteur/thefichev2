@@ -80,17 +80,92 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     "Autres"
   ];
 
+  // Helper function to ensure row is persisted in Supabase
+  const ensureRowPersisted = async (entry: LandSummaryEntry) => {
+    if (!ficheId) throw new Error('Project ID is required');
+    
+    const payload = {
+      id: entry.id, 
+      project_id: ficheId,
+      parcel_id: entry.cadastreId || null,
+      occupation_type: entry.occupationType,
+      owner_status: entry.ownerStatus,
+      owner_name: entry.ownerDetails, // Using owner_name column for owner details
+      notes: entry.additionalInfo, // Using notes column for additional info
+      resident_status: entry.residentStatus,
+      section: entry.section,
+      parcelle: entry.parcelle
+    };
+    
+    const { error } = await supabase
+      .from('land_recaps')
+      .upsert(payload, { onConflict: 'id' })
+      .select('id')
+      .single();
+    
+    if (error) throw error;
+  };
+
   // Load saved land summary values once on component mount
   useEffect(() => {
-    if (ficheId && !initialized) {
-      const storedData = localStorage.getItem(`landSummary_${ficheId}`);
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setEntries(parsedData);
-        setProcessedCadastreIds(parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId).map((entry: LandSummaryEntry) => entry.cadastreId));
+    const initializeData = async () => {
+      if (ficheId && !initialized) {
+        try {
+          // First, try to load from Supabase (source of truth)
+          const { data, error } = await supabase
+            .from('land_recaps')
+            .select('id, parcel_id, section, parcelle, occupation_type, owner_status, owner_name, notes, resident_status')
+            .eq('project_id', ficheId)
+            .order('created_at');
+
+          if (!error && data?.length) {
+            // Map Supabase data to component format
+            const mappedEntries = data.map(d => ({
+              id: d.id,
+              cadastreId: d.parcel_id ?? '',
+              section: d.section ?? '',
+              parcelle: d.parcelle ?? '',
+              occupationType: d.occupation_type ?? 'Terrain nu',
+              ownerStatus: d.owner_status ?? 'Personne physique',
+              ownerDetails: d.owner_name ?? '', // Using owner_name column
+              additionalInfo: d.notes ?? '', // Using notes column
+              residentStatus: d.resident_status ?? 'Vacants'
+            }));
+            
+            setEntries(mappedEntries);
+            setProcessedCadastreIds(
+              data.filter(d => d.parcel_id).map(d => d.parcel_id!)
+            );
+          } else {
+            // Fallback to localStorage if no data in Supabase
+            const storedData = localStorage.getItem(`landSummary_${ficheId}`);
+            if (storedData) {
+              const parsedData = JSON.parse(storedData);
+              setEntries(parsedData);
+              setProcessedCadastreIds(
+                parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId)
+                         .map((entry: LandSummaryEntry) => entry.cadastreId)
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error loading land summary data:', error);
+          // Fallback to localStorage on error
+          const storedData = localStorage.getItem(`landSummary_${ficheId}`);
+          if (storedData) {
+            const parsedData = JSON.parse(storedData);
+            setEntries(parsedData);
+            setProcessedCadastreIds(
+              parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId)
+                       .map((entry: LandSummaryEntry) => entry.cadastreId)
+            );
+          }
+        }
+        setInitialized(true);
       }
-      setInitialized(true);
-    }
+    };
+
+    initializeData();
   }, [ficheId, initialized]);
 
   // Synchronize with cadastre entries only after initialization

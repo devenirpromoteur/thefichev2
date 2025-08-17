@@ -30,8 +30,8 @@ import { CadastreTab } from '@/components/synthese/CadastreTab';
 import { ResidentsTab } from '@/components/synthese/ResidentsTab';
 import { ProjectTab } from '@/components/synthese/ProjectTab';
 import ImageGallery from '@/components/images/ImageGallery';
-import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
-import { LandSummaryTable } from '@/components/residents/LandSummaryTable';
+import { ExistingValuesModule } from '@/components/residents/ExistingValuesModule';
+import { LandRecapModule } from '@/components/residents/LandRecapModule';
 
 interface Fiche {
   id: string;
@@ -807,9 +807,8 @@ export default function FicheDetails() {
           
           <TabsContent value="residents" className="animate-enter opacity-0">
             <Card className="p-6">
-              <div className="mt-2">
-                <PropertyValueTable 
-                  ficheId={ficheId} 
+              <div className="space-y-8">
+                <ExistingValuesModule 
                   projectId={projectId}
                   cadastreEntries={entries.map(entry => ({
                     id: entry.id,
@@ -817,17 +816,17 @@ export default function FicheDetails() {
                     parcelle: entry.parcelle
                   }))}
                 />
-              </div>
-              
-              <div className="mt-8">
-                <LandSummaryTable
-                  ficheId={ficheId}
-                  cadastreEntries={entries.map(entry => ({
-                    id: entry.id,
-                    section: entry.section,
-                    parcelle: entry.parcelle
-                  }))}
-                />
+                
+                <div className="border-t pt-8">
+                  <LandRecapModule
+                    projectId={projectId}
+                    cadastreEntries={entries.map(entry => ({
+                      id: entry.id,
+                      section: entry.section,
+                      parcelle: entry.parcelle
+                    }))}
+                  />
+                </div>
               </div>
             </Card>
           </TabsContent>

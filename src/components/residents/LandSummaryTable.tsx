@@ -7,11 +7,21 @@ import { Input } from '@/components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
-import { Plus, Info, Trash2, Search, X } from 'lucide-react';
+import { Plus, Info, Trash2, Search, X, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 
 // Generate a UUID v4
@@ -53,6 +63,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
 
   const occupationTypes = [
     "Terrain nu",
@@ -305,67 +317,103 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
-  const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
+  // Robust delete function with server-first approach
+  const handleDeleteEntry = async (id: string): Promise<boolean> => {
+    // Guard clause
+    if (!ficheId) {
+      toast({
+        title: "Erreur",
+        description: "ID du projet manquant",
+        variant: "destructive",
+      });
+      return false;
+    }
 
-  const handleDeleteEntry = async (id: string) => {
     // Prevent double-click
-    if (deletingEntry === id) return;
-    setDeletingEntry(id);
+    if (deletingId === id) return false;
+    setDeletingId(id);
 
     const entryToDelete = entries.find(entry => entry.id === id);
     if (!entryToDelete) {
-      setDeletingEntry(null);
-      return;
-    }
-
-    // Optimistic update
-    const prevEntries = entries;
-    const prevProcessedIds = processedCadastreIds;
-
-    // Remove from processedCadastreIds if it has a cadastreId
-    if (entryToDelete.cadastreId) {
-      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-    }
-    
-    setEntries(prev => prev.filter(entry => entry.id !== id));
-    if (selectedRow === id) {
-      setSelectedRow(null);
+      setDeletingId(null);
+      return false;
     }
 
     try {
-      // Delete from Supabase - we ensure the row exists since we upsert on creation
-      if (ficheId) {
-        const { error } = await supabase
-          .from('land_recaps')
-          .delete()
-          .eq('id', id)
-          .eq('project_id', ficheId)
-          .select('id')
-          .single();
+      // Server-first deletion with robust query
+      const { data, error } = await supabase
+        .from('land_recaps')
+        .delete()
+        .eq('id', id)
+        .eq('project_id', ficheId)
+        .select('id')
+        .maybeSingle(); // Prevents 406/409 errors for 0 or 1 rows
+      
+      // Handle specific error cases as success
+      if (error && (error.code === 'PGRST116' || error.code === '404')) {
+        // Row already deleted - treat as success
+        console.log('Row already deleted or not found, treating as success');
+      } else if (error) {
+        // Propagate actual errors
+        let errorMessage = "Impossible de supprimer la ligne.";
         
-        if (error) throw error;
+        if (error.message.includes('RLS')) {
+          errorMessage = "Accès non autorisé pour cette opération.";
+        } else if (error.message.includes('foreign key')) {
+          errorMessage = "Impossible de supprimer: des données liées existent.";
+        } else if (error.message.includes('network')) {
+          errorMessage = "Erreur de connexion. Vérifiez votre connexion internet.";
+        }
+        
+        toast({
+          title: "Erreur",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      // Success: update state after server confirmation
+      setEntries(prev => prev.filter(entry => entry.id !== id));
+      
+      // Remove from processedCadastreIds if it has a cadastreId
+      if (entryToDelete.cadastreId) {
+        setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
+      }
+      
+      // Clear selection if the deleted row was selected
+      if (selectedRow === id) {
+        setSelectedRow(null);
       }
       
       toast({
         title: "Ligne supprimée",
         description: "La ligne a été supprimée avec succès",
       });
+      
+      return true;
     } catch (error) {
       console.error('Error deleting entry:', error);
-      // Rollback on error
-      setEntries(prevEntries);
-      setProcessedCadastreIds(prevProcessedIds);
-      if (selectedRow === id) {
-        setSelectedRow(id);
-      }
-      
       toast({
         title: "Erreur",
-        description: "Impossible de supprimer la ligne.",
+        description: "Erreur inattendue lors de la suppression.",
         variant: "destructive",
       });
+      return false;
     } finally {
-      setDeletingEntry(null);
+      setDeletingId(null);
+    }
+  };
+
+  // Confirm and delete entry
+  const confirmDeleteEntry = (id: string) => {
+    setDeleteDialogId(id);
+  };
+
+  const executeDelete = async () => {
+    if (deleteDialogId) {
+      await handleDeleteEntry(deleteDialogId);
+      setDeleteDialogId(null);
     }
   };
 
@@ -736,14 +784,18 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                   <Button
                     variant="ghost"
                     size="icon"
-                    disabled={deletingEntry === entry.id || !entry.cadastreId}
+                    disabled={deletingId === entry.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteEntry(entry.id);
+                      confirmDeleteEntry(entry.id);
                     }}
                     className="h-8 w-8 text-destructive hover:text-destructive/90 disabled:opacity-50"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {deletingId === entry.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </Button>
                 </TableCell>
               </TableRow>
@@ -751,6 +803,27 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           </TableBody>
         </Table>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteDialogId} onOpenChange={() => setDeleteDialogId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer cette ligne ? Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

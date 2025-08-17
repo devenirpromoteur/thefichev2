@@ -106,51 +106,6 @@ export type Database = {
           },
         ]
       }
-      land_recaps: {
-        Row: {
-          created_at: string
-          id: string
-          notes: string
-          occupation_type: string
-          owner_name: string
-          owner_status: string
-          parcel_id: string | null
-          parcelle: string | null
-          project_id: string
-          resident_status: string
-          section: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string
-          occupation_type?: string
-          owner_name?: string
-          owner_status?: string
-          parcel_id?: string | null
-          parcelle?: string | null
-          project_id: string
-          resident_status?: string
-          section?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string
-          occupation_type?: string
-          owner_name?: string
-          owner_status?: string
-          parcel_id?: string | null
-          parcelle?: string | null
-          project_id?: string
-          resident_status?: string
-          section?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       plu_servitudes: {
         Row: {
           created_at: string
@@ -234,51 +189,6 @@ export type Database = {
           org_id?: string | null
           owner_id?: string
           updated_at?: string | null
-        }
-        Relationships: []
-      }
-      recapitulatif_foncier_rows: {
-        Row: {
-          additional_info: string
-          cadastre_id: string
-          created_at: string
-          fiche_id: string
-          id: string
-          occupation_type: string
-          owner_details: string
-          owner_status: string
-          parcelle: string | null
-          resident_status: string
-          section: string | null
-          updated_at: string
-        }
-        Insert: {
-          additional_info?: string
-          cadastre_id?: string
-          created_at?: string
-          fiche_id: string
-          id?: string
-          occupation_type?: string
-          owner_details?: string
-          owner_status?: string
-          parcelle?: string | null
-          resident_status?: string
-          section?: string | null
-          updated_at?: string
-        }
-        Update: {
-          additional_info?: string
-          cadastre_id?: string
-          created_at?: string
-          fiche_id?: string
-          id?: string
-          occupation_type?: string
-          owner_details?: string
-          owner_status?: string
-          parcelle?: string | null
-          resident_status?: string
-          section?: string | null
-          updated_at?: string
         }
         Relationships: []
       }

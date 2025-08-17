@@ -13,13 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { supabase } from '@/integrations/supabase/client';
-import { useRecapFoncierDelete } from '@/hooks/useRecapFoncierDelete';
 
 type LandSummaryEntry = {
-  tmpId: string; // Stable frontend key
-  id?: string; // Supabase ID (only when persisted)
+  id: string;
   section: string;
   parcelle: string;
   occupationType: string;
@@ -32,7 +28,6 @@ type LandSummaryEntry = {
 
 interface LandSummaryTableProps {
   ficheId: string | undefined;
-  projectId: string;
   cadastreEntries: Array<{
     id: string;
     section: string;
@@ -42,7 +37,6 @@ interface LandSummaryTableProps {
 
 export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({ 
   ficheId, 
-  projectId,
   cadastreEntries 
 }) => {
   const { toast } = useToast();
@@ -50,18 +44,6 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
-
-  // Use the deletion hook
-  const deleteHook = useRecapFoncierDelete({
-    rows: entries.map(entry => ({
-      ...entry,
-      projectId
-    })),
-    setRows: setEntries as any,
-    projectId,
-    processedCadastreIds,
-    setProcessedCadastreIds
-  });
 
   const occupationTypes = [
     "Terrain nu",
@@ -89,49 +71,18 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     "Autres"
   ];
 
-  // Load saved land summary values from Supabase once on component mount
+  // Load saved land summary values once on component mount
   useEffect(() => {
-    const loadLandSummaryData = async () => {
-      if (!ficheId || initialized) return;
-
-      try {
-        const { data, error } = await supabase
-          .from('land_recaps')
-          .select('*')
-          .eq('project_id', projectId);
-
-        if (error) {
-          console.error('Error loading land summary data:', error);
-          toast({
-            title: "Erreur",
-            description: "Impossible de charger les données du récapitulatif foncier.",
-            variant: "destructive",
-          });
-        } else if (data) {
-          const loadedEntries: LandSummaryEntry[] = data.map(item => ({
-            tmpId: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-            id: item.id,
-            section: item.section || '',
-            parcelle: item.parcelle || '',
-            occupationType: item.occupation_type || 'Terrain nu',
-            ownerStatus: item.owner_status || 'Personne physique',
-            ownerDetails: item.owner_name || '',
-            additionalInfo: item.notes || '',
-            residentStatus: item.resident_status || 'Vacants',
-            cadastreId: item.parcel_id || ''
-          }));
-          setEntries(loadedEntries);
-          setProcessedCadastreIds(loadedEntries.filter(entry => entry.cadastreId).map(entry => entry.cadastreId));
-        }
-      } catch (err) {
-        console.error('Unexpected error loading land summary data:', err);
+    if (ficheId && !initialized) {
+      const storedData = localStorage.getItem(`landSummary_${ficheId}`);
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        setEntries(parsedData);
+        setProcessedCadastreIds(parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId).map((entry: LandSummaryEntry) => entry.cadastreId));
       }
-      
       setInitialized(true);
-    };
-
-    loadLandSummaryData();
-  }, [projectId, initialized, toast]);
+    }
+  }, [ficheId, initialized]);
 
   // Synchronize with cadastre entries only after initialization
   useEffect(() => {
@@ -144,7 +95,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
 
     if (newCadastreEntries.length > 0) {
       const newLandSummaryEntries: LandSummaryEntry[] = newCadastreEntries.map(cadastreEntry => ({
-        tmpId: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
         section: cadastreEntry.section || '',
         parcelle: cadastreEntry.parcelle || '',
         occupationType: 'Terrain nu',
@@ -215,7 +166,14 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
 
-  const handleAddEntry = async () => {
+  // Save changes to localStorage
+  useEffect(() => {
+    if (ficheId && entries.length > 0 && initialized) {
+      localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(entries));
+    }
+  }, [entries, ficheId, initialized]);
+
+  const handleAddEntry = () => {
     // Find a cadastre entry that hasn't been used yet
     const unusedCadastreEntry = cadastreEntries.find(entry => 
       !processedCadastreIds.includes(entry.id)
@@ -226,7 +184,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
     
     const newEntry: LandSummaryEntry = {
-      tmpId: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      id: Date.now().toString(),
       section: defaultCadastreEntry.section || '',
       parcelle: defaultCadastreEntry.parcelle || '',
       occupationType: 'Terrain nu',
@@ -243,102 +201,40 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     if (unusedCadastreEntry) {
       setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
     }
-
-    // Immediately save to Supabase
-    saveToSupabase(newEntry);
   };
 
-  const confirmDelete = (tmpId: string) => {
-    const entryToDelete = entries.find(entry => entry.tmpId === tmpId);
-    if (entryToDelete) {
-      deleteHook.openConfirm({
-        ...entryToDelete,
-        projectId
-      });
+  const handleDeleteEntry = (id: string) => {
+    const entryToDelete = entries.find(entry => entry.id === id);
+    if (entryToDelete && entryToDelete.cadastreId) {
+      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
     }
-  };
-
-  const handleInputChange = (tmpId: string, field: keyof Omit<LandSummaryEntry, 'tmpId' | 'id'>, value: string) => {
-    setEntries(prev => prev.map(entry => 
-      entry.tmpId === tmpId ? { ...entry, [field]: value } : entry
-    ));
     
-    // Auto-save changes to Supabase
-    const entry = entries.find(e => e.tmpId === tmpId);
-    if (entry?.id) {
-      saveToSupabase({ ...entry, [field]: value });
+    setEntries(prev => prev.filter(entry => entry.id !== id));
+    if (selectedRow === id) {
+      setSelectedRow(null);
     }
+    
+    toast({
+      title: "Ligne supprimée",
+      description: "La ligne a été supprimée avec succès",
+    });
   };
 
-  const saveToSupabase = async (entry: LandSummaryEntry) => {
-    if (!entry.id) {
-      // Insert new entry
-      const { data, error } = await supabase
-        .from('land_recaps')
-        .insert({
-          project_id: projectId,
-          section: entry.section,
-          parcelle: entry.parcelle,
-          occupation_type: entry.occupationType,
-          owner_status: entry.ownerStatus,
-          owner_name: entry.ownerDetails,
-          notes: entry.additionalInfo,
-          resident_status: entry.residentStatus,
-          parcel_id: entry.cadastreId || null
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Error inserting land recap:', error);
-        toast({
-          title: "Erreur",
-          description: "Impossible de sauvegarder la ligne.",
-          variant: "destructive",
-        });
-      } else if (data) {
-        // Update local state with Supabase ID
-        setEntries(prev => prev.map(e => 
-          e.tmpId === entry.tmpId ? { ...e, id: data.id } : e
-        ));
-      }
-    } else {
-      // Update existing entry
-      const { error } = await supabase
-        .from('land_recaps')
-        .update({
-          section: entry.section,
-          parcelle: entry.parcelle,
-          occupation_type: entry.occupationType,
-          owner_status: entry.ownerStatus,
-          owner_name: entry.ownerDetails,
-          notes: entry.additionalInfo,
-          resident_status: entry.residentStatus,
-          parcel_id: entry.cadastreId || null
-        })
-        .eq('id', entry.id)
-        .eq('project_id', projectId);
-
-      if (error) {
-        console.error('Error updating land recap:', error);
-        toast({
-          title: "Erreur",
-          description: "Impossible de mettre à jour la ligne.",
-          variant: "destructive",
-        });
-      }
-    }
+  const handleInputChange = (id: string, field: keyof Omit<LandSummaryEntry, 'id'>, value: string) => {
+    setEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
   };
 
-  const handleCadastreSelect = (tmpId: string, sectionId: string) => {
+  const handleCadastreSelect = (id: string, sectionId: string) => {
     // Find the current entry and its current cadastreId
-    const currentEntry = entries.find(entry => entry.tmpId === tmpId);
+    const currentEntry = entries.find(entry => entry.id === id);
     const oldCadastreId = currentEntry?.cadastreId;
     
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (selectedCadastre) {
       setEntries(prev => prev.map(entry => 
-        entry.tmpId === tmpId ? { 
+        entry.id === id ? { 
           ...entry, 
           section: selectedCadastre.section,
           parcelle: selectedCadastre.parcelle,
@@ -354,8 +250,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
-  const handleSearchOwner = (tmpId: string) => {
-    const entry = entries.find(entry => entry.tmpId === tmpId);
+  const handleSearchOwner = (id: string) => {
+    const entry = entries.find(entry => entry.id === id);
     if (!entry) return;
 
     let searchDetails = '';
@@ -365,7 +261,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       setTimeout(() => {
         searchDetails = "SCI IMMOBILIER MODERNE\nSIRET: 123456789\nCapital: 100,000€\nCA: 580,000€\nDirigeant: Jean Dupont";
         setEntries(prev => prev.map(e => 
-          e.tmpId === tmpId ? { ...e, ownerDetails: searchDetails } : e
+          e.id === id ? { ...e, ownerDetails: searchDetails } : e
         ));
         
         toast({
@@ -378,7 +274,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       setTimeout(() => {
         searchDetails = "M. Pierre Martin\nTél: 01.XX.XX.XX.XX\nAdresse: 10 rue des Lilas, 75000 Paris";
         setEntries(prev => prev.map(e => 
-          e.tmpId === tmpId ? { ...e, ownerDetails: searchDetails } : e
+          e.id === id ? { ...e, ownerDetails: searchDetails } : e
         ));
         
         toast({
@@ -453,14 +349,14 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           <TableBody>
             {entries.map((entry) => (
               <TableRow 
-                key={entry.tmpId}
-                onClick={() => setSelectedRow(entry.tmpId)}
-                className={`cursor-pointer transition-colors ${selectedRow === entry.tmpId ? 'bg-brand/5' : ''} hover:bg-brand/5`}
+                key={entry.id}
+                onClick={() => setSelectedRow(entry.id)}
+                className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
               >
                 <TableCell>
                   <Select 
                     value={entry.cadastreId || ""}
-                    onValueChange={(value) => handleCadastreSelect(entry.tmpId, value)}
+                    onValueChange={(value) => handleCadastreSelect(entry.id, value)}
                   >
                     <SelectTrigger className="h-8">
                       <SelectValue placeholder="Sélectionner une parcelle" />
@@ -477,7 +373,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 <TableCell>
                   <Select 
                     value={entry.occupationType} 
-                    onValueChange={(value) => handleInputChange(entry.tmpId, 'occupationType', value)}
+                    onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
                   >
                     <SelectTrigger className="h-8">
                       <SelectValue />
@@ -494,7 +390,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 <TableCell>
                   <Select 
                     value={entry.ownerStatus} 
-                    onValueChange={(value) => handleInputChange(entry.tmpId, 'ownerStatus', value)}
+                    onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
                   >
                     <SelectTrigger className="h-8">
                       <SelectValue />
@@ -512,17 +408,16 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                   <div className="flex items-center space-x-2">
                     <Input 
                       value={entry.ownerDetails}
-                      onChange={(e) => handleInputChange(entry.tmpId, 'ownerDetails', e.target.value)}
+                      onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
                       className="h-8"
                       placeholder="Détails du propriétaire"
                     />
                     <Button
-                      type="button"
                       variant="outline"
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSearchOwner(entry.tmpId);
+                        handleSearchOwner(entry.id);
                       }}
                       className="h-8 w-8"
                     >
@@ -533,7 +428,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 <TableCell>
                   <Input 
                     value={entry.additionalInfo}
-                    onChange={(e) => handleInputChange(entry.tmpId, 'additionalInfo', e.target.value)}
+                    onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
                     className="h-8"
                     placeholder="Informations complémentaires"
                   />
@@ -541,7 +436,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 <TableCell>
                   <Select 
                     value={entry.residentStatus} 
-                    onValueChange={(value) => handleInputChange(entry.tmpId, 'residentStatus', value)}
+                    onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
                   >
                     <SelectTrigger className="h-8">
                       <SelectValue />
@@ -557,12 +452,11 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 </TableCell>
                 <TableCell>
                   <Button
-                    type="button"
                     variant="ghost"
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
-                      confirmDelete(entry.tmpId);
+                      handleDeleteEntry(entry.id);
                     }}
                     className="h-8 w-8 text-destructive hover:text-destructive/90"
                   >
@@ -574,17 +468,6 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           </TableBody>
         </Table>
       </div>
-
-      <ConfirmDialog
-        open={!!deleteHook.target}
-        onOpenChange={(open) => !open && deleteHook.closeConfirm()}
-        title="Confirmer la suppression"
-        description="Êtes-vous sûr de vouloir supprimer cette ligne ? Cette action est irréversible."
-        confirmText="Supprimer"
-        cancelText="Annuler"
-        onConfirm={deleteHook.handleDelete}
-        destructive={true}
-      />
     </div>
   );
 };

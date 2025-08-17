@@ -822,7 +822,6 @@ export default function FicheDetails() {
               <div className="mt-8">
                 <LandSummaryTable
                   ficheId={ficheId}
-                  projectId={projectId}
                   cadastreEntries={entries.map(entry => ({
                     id: entry.id,
                     section: entry.section,

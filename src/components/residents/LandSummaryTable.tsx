@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
@@ -409,157 +408,160 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((entry) => (
-              <TableRow 
-                key={entry.id}
-                onClick={() => setSelectedRow(entry.id)}
-                className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
-              >
-                <TableCell>
-                  <div 
-                    className="flex items-center gap-2"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Backspace' && entry.cadastreId && document.activeElement?.tagName !== 'INPUT') {
-                        e.preventDefault();
-                        handleClearParcel(entry.id);
-                      }
-                    }}
-                    tabIndex={0}
-                  >
-                    <Select 
-                      value={entry.cadastreId || undefined}
-                      onValueChange={(value) => handleCadastreSelect(entry.id, value)}
+            {entries.map((entry) => {
+              console.log('Rendering entry:', entry.id, 'cadastreId:', entry.cadastreId, 'section:', entry.section, 'parcelle:', entry.parcelle);
+              return (
+                <TableRow 
+                  key={entry.id}
+                  onClick={() => setSelectedRow(entry.id)}
+                  className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
+                >
+                  <TableCell>
+                    <div 
+                      className="flex items-center gap-2"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && entry.cadastreId && document.activeElement?.tagName !== 'INPUT') {
+                          e.preventDefault();
+                          handleClearParcel(entry.id);
+                        }
+                      }}
+                      tabIndex={0}
                     >
-                      <SelectTrigger className="h-8 flex-1">
-                        <SelectValue placeholder="Sélectionner une parcelle" />
+                      <Select 
+                        value={entry.cadastreId || undefined}
+                        onValueChange={(value) => handleCadastreSelect(entry.id, value)}
+                      >
+                        <SelectTrigger className="h-8 flex-1">
+                          <SelectValue placeholder="Sélectionner une parcelle" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {cadastreEntries.map((cadastre) => (
+                            <SelectItem key={cadastre.id} value={cadastre.id}>
+                              {cadastre.section} {cadastre.parcelle}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {entry.cadastreId && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleClearParcel(entry.id);
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Retirer la parcelle</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.occupationType} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {cadastreEntries.map((cadastre) => (
-                          <SelectItem key={cadastre.id} value={cadastre.id}>
-                            {cadastre.section} {cadastre.parcelle}
+                        {occupationTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {entry.cadastreId && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleClearParcel(entry.id);
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Retirer la parcelle</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.occupationType} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {occupationTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.ownerStatus} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ownerStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center space-x-2">
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.ownerStatus} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ownerStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center space-x-2">
+                      <Input 
+                        value={entry.ownerDetails}
+                        onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
+                        className="h-8"
+                        placeholder="Détails du propriétaire"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSearchOwner(entry.id);
+                        }}
+                        className="h-8 w-8"
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <Input 
-                      value={entry.ownerDetails}
-                      onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
+                      value={entry.additionalInfo}
+                      onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
                       className="h-8"
-                      placeholder="Détails du propriétaire"
+                      placeholder="Informations complémentaires"
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.residentStatus} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {residentStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSearchOwner(entry.id);
+                        handleDeleteEntry(entry.id);
                       }}
-                      className="h-8 w-8"
+                      className="h-8 w-8 text-destructive hover:text-destructive/90"
                     >
-                      <Search className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Input 
-                    value={entry.additionalInfo}
-                    onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
-                    className="h-8"
-                    placeholder="Informations complémentaires"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.residentStatus} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {residentStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteEntry(entry.id);
-                    }}
-                    className="h-8 w-8 text-destructive hover:text-destructive/90"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

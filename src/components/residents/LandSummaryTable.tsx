@@ -31,6 +31,7 @@ type LandSummaryEntry = {
 
 interface LandSummaryTableProps {
   ficheId: string | undefined;
+  projectId: string;
   cadastreEntries: Array<{
     id: string;
     section: string;
@@ -40,6 +41,7 @@ interface LandSummaryTableProps {
 
 export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({ 
   ficheId, 
+  projectId,
   cadastreEntries 
 }) => {
   const { toast } = useToast();
@@ -87,7 +89,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         const { data, error } = await supabase
           .from('land_recaps')
           .select('*')
-          .eq('project_id', ficheId);
+          .eq('project_id', projectId);
 
         if (error) {
           console.error('Error loading land summary data:', error);
@@ -120,7 +122,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     };
 
     loadLandSummaryData();
-  }, [ficheId, initialized, toast]);
+  }, [projectId, initialized, toast]);
 
   // Synchronize with cadastre entries only after initialization
   useEffect(() => {
@@ -270,7 +272,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       const { error } = await supabase
         .from('land_recaps')
         .delete()
-        .match({ id: entryToDelete.id, project_id: ficheId });
+        .match({ id: entryToDelete.id, project_id: projectId });
 
       if (error) {
         // Rollback on error

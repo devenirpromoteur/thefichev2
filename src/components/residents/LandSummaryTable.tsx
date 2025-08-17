@@ -85,9 +85,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
 
       try {
         const { data, error } = await supabase
-          .from('land_recaps')
+          .from('recapitulatif_foncier_rows')
           .select('*')
-          .eq('project_id', ficheId);
+          .eq('fiche_id', ficheId);
 
         if (error) {
           console.error('Error loading land summary data:', error);
@@ -104,10 +104,10 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
             parcelle: item.parcelle || '',
             occupationType: item.occupation_type || 'Terrain nu',
             ownerStatus: item.owner_status || 'Personne physique',
-            ownerDetails: item.owner_name || '',
-            additionalInfo: item.notes || '',
+            ownerDetails: item.owner_details || '',
+            additionalInfo: item.additional_info || '',
             residentStatus: item.resident_status || 'Vacants',
-            cadastreId: item.parcel_id || ''
+            cadastreId: item.cadastre_id || ''
           }));
           setEntries(loadedEntries);
           setProcessedCadastreIds(loadedEntries.filter(entry => entry.cadastreId).map(entry => entry.cadastreId));
@@ -268,9 +268,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
 
     try {
       const { error } = await supabase
-        .from('land_recaps')
+        .from('recapitulatif_foncier_rows')
         .delete()
-        .match({ id: entryToDelete.id, project_id: ficheId });
+        .match({ id: entryToDelete.id, fiche_id: ficheId });
 
       if (error) {
         // Rollback on error

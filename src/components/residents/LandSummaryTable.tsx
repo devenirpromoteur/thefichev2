@@ -215,15 +215,21 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
 
   const handleDeleteEntry = async (id: string) => {
+    console.log('handleDeleteEntry called with id:', id);
+    
     // Prevent double-click
     if (deletingEntry === id) return;
     setDeletingEntry(id);
 
     const entryToDelete = entries.find(entry => entry.id === id);
     if (!entryToDelete) {
+      console.log('Entry not found for id:', id);
       setDeletingEntry(null);
       return;
     }
+
+    console.log('Entry to delete:', entryToDelete);
+    console.log('ficheId (project_id):', ficheId);
 
     // Optimistic update
     const prevEntries = entries;
@@ -240,15 +246,30 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
 
     try {
-      // Delete from Supabase if ficheId exists (meaning it's persisted)
-      if (ficheId) {
-        const { error } = await supabase
+      // Only try to delete from Supabase if the entry has a valid UUID format
+      // Check if the ID looks like a UUID (simple check)
+      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      
+      if (ficheId && isValidUUID) {
+        console.log('Attempting to delete from Supabase with id:', id, 'project_id:', ficheId);
+        
+        const { data, error } = await supabase
           .from('land_recaps')
           .delete()
           .eq('id', id)
-          .eq('project_id', ficheId);
+          .eq('project_id', ficheId)
+          .select('id');
+        
+        console.log('Supabase delete result:', { data, error });
         
         if (error) throw error;
+        
+        // If no rows were affected, it means the entry didn't exist in DB
+        if (!data || data.length === 0) {
+          console.log('No rows deleted - entry may not exist in database');
+        }
+      } else {
+        console.log('Skipping Supabase delete - either no ficheId or invalid UUID format');
       }
       
       toast({

@@ -90,8 +90,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       parcel_id: entry.cadastreId || null,
       occupation_type: entry.occupationType,
       owner_status: entry.ownerStatus,
-      owner_name: entry.ownerDetails, // Using owner_name column for owner details
-      notes: entry.additionalInfo, // Using notes column for additional info
+      owner_name: entry.ownerDetails,
+      notes: entry.additionalInfo,
       resident_status: entry.residentStatus,
       section: entry.section,
       parcelle: entry.parcelle
@@ -106,7 +106,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     if (error) throw error;
   };
 
-  // Load saved land summary values once on component mount
+  // Load saved land summary values once on component mount - Supabase as source of truth
   useEffect(() => {
     const initializeData = async () => {
       if (ficheId && !initialized) {
@@ -127,8 +127,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
               parcelle: d.parcelle ?? '',
               occupationType: d.occupation_type ?? 'Terrain nu',
               ownerStatus: d.owner_status ?? 'Personne physique',
-              ownerDetails: d.owner_name ?? '', // Using owner_name column
-              additionalInfo: d.notes ?? '', // Using notes column
+              ownerDetails: d.owner_name ?? '',
+              additionalInfo: d.notes ?? '',
               residentStatus: d.resident_status ?? 'Vacants'
             }));
             
@@ -250,14 +250,14 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
 
-  // Save changes to localStorage
+  // Save changes to localStorage after each successful DB operation
   useEffect(() => {
     if (ficheId && entries.length > 0 && initialized) {
       localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(entries));
     }
   }, [entries, ficheId, initialized]);
 
-  const handleAddEntry = () => {
+  const handleAddEntry = async () => {
     // Find a cadastre entry that hasn't been used yet
     const unusedCadastreEntry = cadastreEntries.find(entry => 
       !processedCadastreIds.includes(entry.id)
@@ -278,33 +278,45 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       residentStatus: 'Vacants',
       cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
     };
-    
-    setEntries(prev => [...prev, newEntry]);
-    
-    // If we used an unused cadastre entry, add it to processed ids
-    if (unusedCadastreEntry) {
-      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+
+    try {
+      // Persist to Supabase first
+      await ensureRowPersisted(newEntry);
+      
+      // Then update state
+      setEntries(prev => [...prev, newEntry]);
+      
+      // If we used an unused cadastre entry, add it to processed ids
+      if (unusedCadastreEntry) {
+        setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+      }
+
+      toast({
+        title: "Ligne ajoutée",
+        description: "Nouvelle ligne créée et sauvegardée.",
+      });
+    } catch (error) {
+      console.error('Error adding entry:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter la ligne.",
+        variant: "destructive",
+      });
     }
   };
 
   const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
 
   const handleDeleteEntry = async (id: string) => {
-    console.log('handleDeleteEntry called with id:', id);
-    
     // Prevent double-click
     if (deletingEntry === id) return;
     setDeletingEntry(id);
 
     const entryToDelete = entries.find(entry => entry.id === id);
     if (!entryToDelete) {
-      console.log('Entry not found for id:', id);
       setDeletingEntry(null);
       return;
     }
-
-    console.log('Entry to delete:', entryToDelete);
-    console.log('ficheId (project_id):', ficheId);
 
     // Optimistic update
     const prevEntries = entries;
@@ -321,30 +333,17 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
 
     try {
-      // Only try to delete from Supabase if the entry has a valid UUID format
-      // Check if the ID looks like a UUID (simple check)
-      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      
-      if (ficheId && isValidUUID) {
-        console.log('Attempting to delete from Supabase with id:', id, 'project_id:', ficheId);
-        
-        const { data, error } = await supabase
+      // Delete from Supabase - we ensure the row exists since we upsert on creation
+      if (ficheId) {
+        const { error } = await supabase
           .from('land_recaps')
           .delete()
           .eq('id', id)
           .eq('project_id', ficheId)
-          .select('id');
-        
-        console.log('Supabase delete result:', { data, error });
+          .select('id')
+          .single();
         
         if (error) throw error;
-        
-        // If no rows were affected, it means the entry didn't exist in DB
-        if (!data || data.length === 0) {
-          console.log('No rows deleted - entry may not exist in database');
-        }
-      } else {
-        console.log('Skipping Supabase delete - either no ficheId or invalid UUID format');
       }
       
       toast({
@@ -394,8 +393,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const handleCadastreSelect = async (id: string, sectionId: string) => {
     // Find the current entry and its current cadastreId
     const currentEntry = entries.find(entry => entry.id === id);
-    const oldCadastreId = currentEntry?.cadastreId;
+    if (!currentEntry) return;
     
+    const oldCadastreId = currentEntry.cadastreId;
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (!selectedCadastre) return;
 
@@ -403,13 +403,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     const prevEntries = entries;
     const prevProcessedIds = processedCadastreIds;
     
+    const updatedEntry = {
+      ...currentEntry,
+      section: selectedCadastre.section,
+      parcelle: selectedCadastre.parcelle,
+      cadastreId: selectedCadastre.id
+    };
+
     setEntries(prev => prev.map(entry => 
-      entry.id === id ? { 
-        ...entry, 
-        section: selectedCadastre.section,
-        parcelle: selectedCadastre.parcelle,
-        cadastreId: selectedCadastre.id
-      } : entry
+      entry.id === id ? updatedEntry : entry
     ));
     
     // Update processedCadastreIds to reflect the change
@@ -419,7 +421,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
 
     try {
-      // Persist to Supabase
+      // Ensure row is persisted before updating parcel
+      await ensureRowPersisted(updatedEntry);
+      // Then update the parcel reference
       await updateRowParcel(id, sectionId);
     } catch (error) {
       console.error('Error updating parcel selection:', error);
@@ -438,8 +442,6 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const [clearingParcel, setClearingParcel] = useState<string | null>(null);
 
   const handleClearParcel = async (entryId: string) => {
-    console.log('handleClearParcel called with entryId:', entryId);
-    
     // Prevent double-click
     if (clearingParcel === entryId) return;
     setClearingParcel(entryId);
@@ -450,31 +452,31 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       return;
     }
 
-    console.log('Current entry before clear:', currentEntry);
-
     // Optimistic update
     const prevEntries = entries;
     const prevProcessedIds = processedCadastreIds;
     
+    const updatedEntry = {
+      ...currentEntry,
+      section: '',
+      parcelle: '',
+      cadastreId: ''
+    };
+
     setEntries(prev => prev.map(entry => 
-      entry.id === entryId ? { 
-        ...entry, 
-        section: '',
-        parcelle: '',
-        cadastreId: '' 
-      } : entry
+      entry.id === entryId ? updatedEntry : entry
     ));
 
     // Remove from processedCadastreIds
     if (currentEntry.cadastreId) {
       setProcessedCadastreIds(prev => prev.filter(id => id !== currentEntry.cadastreId));
-      console.log('Removed cadastreId from processed:', currentEntry.cadastreId);
     }
 
     try {
-      // Persist to Supabase (set parcel_id to null)
+      // Ensure row is persisted before clearing parcel
+      await ensureRowPersisted(updatedEntry);
+      // Then clear the parcel reference (set parcel_id to null)
       await updateRowParcel(entryId, null);
-      console.log('Successfully cleared parcel for entry:', entryId);
       
       toast({
         title: "Parcelle effacée",
@@ -593,162 +595,159 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((entry) => {
-              console.log('Rendering entry:', entry.id, 'cadastreId:', entry.cadastreId, 'section:', entry.section, 'parcelle:', entry.parcelle);
-              return (
-                <TableRow 
-                  key={entry.id}
-                  onClick={() => setSelectedRow(entry.id)}
-                  className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
-                >
-                  <TableCell>
-                    <div 
-                      className="flex items-center gap-2"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Backspace' && entry.cadastreId && document.activeElement?.tagName !== 'INPUT') {
-                          e.preventDefault();
-                          handleClearParcel(entry.id);
-                        }
-                      }}
-                      tabIndex={0}
-                    >
-                      <Select 
-                        value={entry.cadastreId || undefined}
-                        onValueChange={(value) => handleCadastreSelect(entry.id, value)}
-                      >
-                        <SelectTrigger className="h-8 flex-1">
-                          <SelectValue placeholder="Sélectionner une parcelle" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {cadastreEntries.map((cadastre) => (
-                            <SelectItem key={cadastre.id} value={cadastre.id}>
-                              {cadastre.section} {cadastre.parcelle}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {entry.cadastreId && (
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                disabled={clearingParcel === entry.id}
-                                className="h-8 w-8"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleClearParcel(entry.id);
-                                }}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Retirer la parcelle</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
+            {entries.map((entry) => (
+              <TableRow 
+                key={entry.id}
+                onClick={() => setSelectedRow(entry.id)}
+                className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
+              >
+                <TableCell>
+                  <div 
+                    className="flex items-center gap-2"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && entry.cadastreId && document.activeElement?.tagName !== 'INPUT') {
+                        e.preventDefault();
+                        handleClearParcel(entry.id);
+                      }
+                    }}
+                    tabIndex={0}
+                  >
                     <Select 
-                      value={entry.occupationType} 
-                      onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
+                      value={entry.cadastreId || undefined}
+                      onValueChange={(value) => handleCadastreSelect(entry.id, value)}
                     >
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
+                      <SelectTrigger className="h-8 flex-1">
+                        <SelectValue placeholder="Sélectionner une parcelle" />
                       </SelectTrigger>
                       <SelectContent>
-                        {occupationTypes.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type}
+                        {cadastreEntries.map((cadastre) => (
+                          <SelectItem key={cadastre.id} value={cadastre.id}>
+                            {cadastre.section} {cadastre.parcelle}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </TableCell>
-                  <TableCell>
-                    <Select 
-                      value={entry.ownerStatus} 
-                      onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ownerStatusOptions.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Input 
-                        value={entry.ownerDetails}
-                        onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
-                        className="h-8"
-                        placeholder="Détails du propriétaire"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSearchOwner(entry.id);
-                        }}
-                        className="h-8 w-8"
-                      >
-                        <Search className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
+                    {entry.cadastreId && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={clearingParcel === entry.id}
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearParcel(entry.id);
+                              }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Retirer la parcelle</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Select 
+                    value={entry.occupationType} 
+                    onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {occupationTypes.map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {type}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <Select 
+                    value={entry.ownerStatus} 
+                    onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ownerStatusOptions.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center space-x-2">
                     <Input 
-                      value={entry.additionalInfo}
-                      onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
+                      value={entry.ownerDetails}
+                      onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
                       className="h-8"
-                      placeholder="Informations complémentaires"
+                      placeholder="Détails du propriétaire"
                     />
-                  </TableCell>
-                  <TableCell>
-                    <Select 
-                      value={entry.residentStatus} 
-                      onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {residentStatusOptions.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="icon"
-                      disabled={deletingEntry === entry.id || !entry.cadastreId}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteEntry(entry.id);
+                        handleSearchOwner(entry.id);
                       }}
-                      className="h-8 w-8 text-destructive hover:text-destructive/90 disabled:opacity-50"
+                      className="h-8 w-8"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Search className="h-4 w-4" />
                     </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Input 
+                    value={entry.additionalInfo}
+                    onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
+                    className="h-8"
+                    placeholder="Informations complémentaires"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Select 
+                    value={entry.residentStatus} 
+                    onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {residentStatusOptions.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={deletingEntry === entry.id || !entry.cadastreId}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteEntry(entry.id);
+                    }}
+                    className="h-8 w-8 text-destructive hover:text-destructive/90 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </div>

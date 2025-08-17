@@ -115,8 +115,10 @@ export type Database = {
           owner_name: string
           owner_status: string
           parcel_id: string | null
+          parcelle: string | null
           project_id: string
           resident_status: string
+          section: string | null
           updated_at: string
         }
         Insert: {
@@ -127,8 +129,10 @@ export type Database = {
           owner_name?: string
           owner_status?: string
           parcel_id?: string | null
+          parcelle?: string | null
           project_id: string
           resident_status?: string
+          section?: string | null
           updated_at?: string
         }
         Update: {
@@ -139,8 +143,10 @@ export type Database = {
           owner_name?: string
           owner_status?: string
           parcel_id?: string | null
+          parcelle?: string | null
           project_id?: string
           resident_status?: string
+          section?: string | null
           updated_at?: string
         }
         Relationships: []

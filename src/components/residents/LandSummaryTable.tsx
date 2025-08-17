@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
-import { Plus, Info, Trash2, Search } from 'lucide-react';
+import { Plus, Info, Trash2, Search, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
@@ -259,6 +259,50 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
+  const handleClearParcel = async (entryId: string) => {
+    const currentEntry = entries.find(entry => entry.id === entryId);
+    if (!currentEntry) return;
+
+    // Optimistic update
+    const prevEntries = entries;
+    setEntries(prev => prev.map(entry => 
+      entry.id === entryId ? { 
+        ...entry, 
+        section: '',
+        parcelle: '',
+        cadastreId: '' 
+      } : entry
+    ));
+
+    // Remove from processedCadastreIds
+    if (currentEntry.cadastreId) {
+      setProcessedCadastreIds(prev => prev.filter(id => id !== currentEntry.cadastreId));
+    }
+
+    try {
+      // Update in database (set parcel_id to null)
+      // This would be done via Supabase when implemented
+      console.log('Clearing parcel for entry:', entryId);
+      
+      toast({
+        title: "Parcelle effacée",
+        description: "La sélection de parcelle a été supprimée.",
+      });
+    } catch (error) {
+      // Rollback on error
+      setEntries(prevEntries);
+      if (currentEntry.cadastreId) {
+        setProcessedCadastreIds(prev => [...prev, currentEntry.cadastreId]);
+      }
+      
+      toast({
+        title: "Erreur",
+        description: "Impossible d'effacer la parcelle.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSearchOwner = (id: string) => {
     const entry = entries.find(entry => entry.id === id);
     if (!entry) return;
@@ -363,21 +407,54 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                 className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
               >
                 <TableCell>
-                  <Select 
-                    value={entry.cadastreId || ""}
-                    onValueChange={(value) => handleCadastreSelect(entry.id, value)}
+                  <div 
+                    className="flex items-center gap-2"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && entry.cadastreId && document.activeElement?.tagName !== 'INPUT') {
+                        e.preventDefault();
+                        handleClearParcel(entry.id);
+                      }
+                    }}
+                    tabIndex={0}
                   >
-                    <SelectTrigger className="h-8">
-                      <SelectValue placeholder="Sélectionner une parcelle" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cadastreEntries.map((cadastre) => (
-                        <SelectItem key={cadastre.id} value={cadastre.id}>
-                          {cadastre.section} {cadastre.parcelle}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Select 
+                      value={entry.cadastreId || undefined}
+                      onValueChange={(value) => handleCadastreSelect(entry.id, value)}
+                    >
+                      <SelectTrigger className="h-8 flex-1">
+                        <SelectValue placeholder="Sélectionner une parcelle" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cadastreEntries.map((cadastre) => (
+                          <SelectItem key={cadastre.id} value={cadastre.id}>
+                            {cadastre.section} {cadastre.parcelle}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {entry.cadastreId && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearParcel(entry.id);
+                              }}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Retirer la parcelle</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Select 

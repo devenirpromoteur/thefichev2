@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Trash2, Edit, Save, X, Users } from 'lucide-react';
-import { ExistingValuesModule } from '@/components/residents/ExistingValuesModule';
+import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
 import { PropertyOwnersTable } from '@/components/residents/PropertyOwnersTable';
 import { useToast } from '@/hooks/use-toast';
 
@@ -419,10 +419,11 @@ const Residents = () => {
             </CardContent>
           </Card>
 
-          {/* Existing Values Module */}
+          {/* Property Value Table from existing component */}
           <Card className="shadow-soft">
             <CardContent className="pt-6">
-              <ExistingValuesModule 
+              <PropertyValueTable 
+                ficheId={getFicheId()} 
                 projectId={projectId}
                 cadastreEntries={cadastreEntries}
               />

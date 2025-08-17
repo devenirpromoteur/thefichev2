@@ -13,18 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { useLandRecap, type LandRecapEntry } from '@/hooks/useLandRecap';
 
-type LandSummaryEntry = {
-  id: string;
-  section: string;
-  parcelle: string;
-  occupationType: string;
-  ownerStatus: string;
-  ownerDetails: string;
-  additionalInfo: string;
-  residentStatus: string;
-  cadastreId: string; // Added to track the source cadastre entry
-};
+// Using LandRecapEntry from the hook
 
 interface LandSummaryTableProps {
   ficheId: string | undefined;
@@ -40,10 +32,19 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   cadastreEntries 
 }) => {
   const { toast } = useToast();
-  const [entries, setEntries] = useState<LandSummaryEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  
+  const {
+    entries,
+    isLoading,
+    deleteTarget,
+    addEntry,
+    updateEntry,
+    confirmDelete,
+    handleConfirmDelete,
+    cancelDelete,
+  } = useLandRecap({ ficheId: ficheId || '' });
 
   const occupationTypes = [
     "Terrain nu",
@@ -71,31 +72,28 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     "Autres"
   ];
 
-  // Load saved land summary values once on component mount
+  // Update processed cadastre IDs when entries change
   useEffect(() => {
-    if (ficheId && !initialized) {
-      const storedData = localStorage.getItem(`landSummary_${ficheId}`);
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setEntries(parsedData);
-        setProcessedCadastreIds(parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId).map((entry: LandSummaryEntry) => entry.cadastreId));
-      }
-      setInitialized(true);
+    if (!isLoading) {
+      setProcessedCadastreIds(
+        entries.filter(entry => entry.cadastreId).map(entry => entry.cadastreId)
+      );
     }
-  }, [ficheId, initialized]);
+  }, [entries, isLoading]);
 
-  // Synchronize with cadastre entries only after initialization
+  // Synchronize with cadastre entries
   useEffect(() => {
-    if (!initialized || !cadastreEntries.length || !ficheId) return;
+    if (isLoading || !cadastreEntries.length || !ficheId) return;
 
-    // Find cadastre entries that don't have a corresponding land summary entry
+    // Find new cadastre entries to add
     const newCadastreEntries = cadastreEntries.filter(
       cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
     );
 
-    if (newCadastreEntries.length > 0) {
-      const newLandSummaryEntries: LandSummaryEntry[] = newCadastreEntries.map(cadastreEntry => ({
-        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+    // Add new entries
+    newCadastreEntries.forEach(async (cadastreEntry) => {
+      await addEntry({
+        ficheId,
         section: cadastreEntry.section || '',
         parcelle: cadastreEntry.parcelle || '',
         occupationType: 'Terrain nu',
@@ -104,76 +102,20 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         additionalInfo: '',
         residentStatus: 'Vacants',
         cadastreId: cadastreEntry.id
-      }));
-
-      setEntries(prev => [...prev, ...newLandSummaryEntries]);
-      setProcessedCadastreIds(prev => [...prev, ...newCadastreEntries.map(entry => entry.id)]);
-      
-      toast({
-        title: "Nouvelles parcelles ajoutées",
-        description: `${newLandSummaryEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
       });
-    }
-
-    // Check for deleted cadastre entries and remove corresponding land summary entries
-    const existingCadastreIds = cadastreEntries.map(entry => entry.id);
-    const entriesWithDeletedCadastre = entries.filter(
-      entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
-    );
-
-    if (entriesWithDeletedCadastre.length > 0) {
-      setEntries(prev => prev.filter(entry => 
-        !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
-      ));
-      
-      // Update processedCadastreIds to remove deleted entries
-      setProcessedCadastreIds(prev => prev.filter(id => existingCadastreIds.includes(id)));
-      
-      toast({
-        title: "Parcelles supprimées",
-        description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
-      });
-    }
-
-    // Update section/parcelle info for existing entries if they changed in cadastre
-    let updatedEntries = false;
-    const newEntries = entries.map(entry => {
-      if (entry.cadastreId) {
-        const correspondingCadastreEntry = cadastreEntries.find(
-          cadastreEntry => cadastreEntry.id === entry.cadastreId
-        );
-        
-        if (correspondingCadastreEntry && 
-            (entry.section !== correspondingCadastreEntry.section || 
-             entry.parcelle !== correspondingCadastreEntry.parcelle)) {
-          updatedEntries = true;
-          return {
-            ...entry,
-            section: correspondingCadastreEntry.section,
-            parcelle: correspondingCadastreEntry.parcelle
-          };
-        }
-      }
-      return entry;
     });
 
-    if (updatedEntries) {
-      setEntries(newEntries);
+    if (newCadastreEntries.length > 0) {
       toast({
-        title: "Parcelles mises à jour",
-        description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
+        title: "Nouvelles parcelles ajoutées",
+        description: `${newCadastreEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
       });
     }
-  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
+  }, [cadastreEntries, processedCadastreIds, ficheId, isLoading, addEntry, toast]);
 
-  // Save changes to localStorage
-  useEffect(() => {
-    if (ficheId && entries.length > 0 && initialized) {
-      localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(entries));
-    }
-  }, [entries, ficheId, initialized]);
+  const handleAddEntry = async () => {
+    if (!ficheId) return;
 
-  const handleAddEntry = () => {
     // Find a cadastre entry that hasn't been used yet
     const unusedCadastreEntry = cadastreEntries.find(entry => 
       !processedCadastreIds.includes(entry.id)
@@ -183,8 +125,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     const defaultCadastreEntry = unusedCadastreEntry || 
       (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
     
-    const newEntry: LandSummaryEntry = {
-      id: Date.now().toString(),
+    await addEntry({
+      ficheId,
       section: defaultCadastreEntry.section || '',
       parcelle: defaultCadastreEntry.parcelle || '',
       occupationType: 'Terrain nu',
@@ -192,65 +134,33 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       ownerDetails: '',
       additionalInfo: '',
       residentStatus: 'Vacants',
-      cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
-    };
-    
-    setEntries(prev => [...prev, newEntry]);
-    
-    // If we used an unused cadastre entry, add it to processed ids
-    if (unusedCadastreEntry) {
-      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
-    }
-  };
-
-  const handleDeleteEntry = (id: string) => {
-    const entryToDelete = entries.find(entry => entry.id === id);
-    if (entryToDelete && entryToDelete.cadastreId) {
-      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-    }
-    
-    setEntries(prev => prev.filter(entry => entry.id !== id));
-    if (selectedRow === id) {
-      setSelectedRow(null);
-    }
-    
-    toast({
-      title: "Ligne supprimée",
-      description: "La ligne a été supprimée avec succès",
+      cadastreId: defaultCadastreEntry.id || ''
     });
   };
 
-  const handleInputChange = (id: string, field: keyof Omit<LandSummaryEntry, 'id'>, value: string) => {
-    setEntries(prev => prev.map(entry => 
-      entry.id === id ? { ...entry, [field]: value } : entry
-    ));
-  };
-
-  const handleCadastreSelect = (id: string, sectionId: string) => {
-    // Find the current entry and its current cadastreId
-    const currentEntry = entries.find(entry => entry.id === id);
-    const oldCadastreId = currentEntry?.cadastreId;
-    
-    const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
-    if (selectedCadastre) {
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? { 
-          ...entry, 
-          section: selectedCadastre.section,
-          parcelle: selectedCadastre.parcelle,
-          cadastreId: selectedCadastre.id // Update the link to cadastre
-        } : entry
-      ));
-      
-      // Update processedCadastreIds to reflect the change
-      if (oldCadastreId) {
-        setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
-      }
-      setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
+  const handleDeleteEntry = (entry: LandRecapEntry) => {
+    confirmDelete(entry);
+    if (selectedRow === entry.id) {
+      setSelectedRow(null);
     }
   };
 
-  const handleSearchOwner = (id: string) => {
+  const handleInputChange = async (id: string, field: keyof Omit<LandRecapEntry, 'id' | 'ficheId'>, value: string) => {
+    await updateEntry(id, { [field]: value });
+  };
+
+  const handleCadastreSelect = async (id: string, sectionId: string) => {
+    const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
+    if (selectedCadastre) {
+      await updateEntry(id, {
+        section: selectedCadastre.section,
+        parcelle: selectedCadastre.parcelle,
+        cadastreId: selectedCadastre.id
+      });
+    }
+  };
+
+  const handleSearchOwner = async (id: string) => {
     const entry = entries.find(entry => entry.id === id);
     if (!entry) return;
 
@@ -258,11 +168,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     
     if (entry.ownerStatus === 'Personne morale') {
       // Simulate API call to Pappers API for company information
-      setTimeout(() => {
+      setTimeout(async () => {
         searchDetails = "SCI IMMOBILIER MODERNE\nSIRET: 123456789\nCapital: 100,000€\nCA: 580,000€\nDirigeant: Jean Dupont";
-        setEntries(prev => prev.map(e => 
-          e.id === id ? { ...e, ownerDetails: searchDetails } : e
-        ));
+        await updateEntry(id, { ownerDetails: searchDetails });
         
         toast({
           title: "Informations trouvées",
@@ -271,11 +179,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       }, 1000);
     } else if (entry.ownerStatus === 'Personne physique') {
       // Simulate API call to Pages Jaunes or equivalent
-      setTimeout(() => {
+      setTimeout(async () => {
         searchDetails = "M. Pierre Martin\nTél: 01.XX.XX.XX.XX\nAdresse: 10 rue des Lilas, 75000 Paris";
-        setEntries(prev => prev.map(e => 
-          e.id === id ? { ...e, ownerDetails: searchDetails } : e
-        ));
+        await updateEntry(id, { ownerDetails: searchDetails });
         
         toast({
           title: "Informations trouvées",
@@ -285,21 +191,30 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
-  return (
-    <div className="space-y-4 animate-enter opacity-0">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold text-brand">Récapitulatif foncier</h2>
-        <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleAddEntry}
-            className="flex items-center gap-1"
-          >
-            <Plus className="h-4 w-4" /> Ajouter
-          </Button>
-        </div>
+  if (isLoading) {
+    return (
+      <div className="space-y-4 animate-enter opacity-0">
+        <div className="text-center py-8">Chargement...</div>
       </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4 animate-enter opacity-0">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-brand">Récapitulatif foncier</h2>
+          <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleAddEntry}
+              className="flex items-center gap-1"
+            >
+              <Plus className="h-4 w-4" /> Ajouter
+            </Button>
+          </div>
+        </div>
       
       <div className="overflow-x-auto border rounded-md">
         <Table>
@@ -456,7 +371,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteEntry(entry.id);
+                      handleDeleteEntry(entry);
                     }}
                     className="h-8 w-8 text-destructive hover:text-destructive/90"
                   >
@@ -469,5 +384,17 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         </Table>
       </div>
     </div>
+
+    <ConfirmDialog
+      open={!!deleteTarget}
+      onOpenChange={(open) => !open && cancelDelete()}
+      title="Supprimer la ligne"
+      description="Êtes-vous sûr de vouloir supprimer cette ligne ? Cette action est irréversible."
+      confirmText="Supprimer"
+      cancelText="Annuler"
+      onConfirm={handleConfirmDelete}
+      destructive
+    />
+  </>
   );
 };

@@ -640,12 +640,12 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      disabled={deletingEntry === entry.id}
+                      disabled={deletingEntry === entry.id || !entry.cadastreId}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteEntry(entry.id);
                       }}
-                      className="h-8 w-8 text-destructive hover:text-destructive/90"
+                      className="h-8 w-8 text-destructive hover:text-destructive/90 disabled:opacity-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

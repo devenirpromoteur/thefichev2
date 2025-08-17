@@ -174,46 +174,49 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   }, [entries, ficheId, initialized]);
 
   const handleAddEntry = () => {
-    // Create a new entry that can be manually configured
+    // Find a cadastre entry that hasn't been used yet
+    const unusedCadastreEntry = cadastreEntries.find(entry => 
+      !processedCadastreIds.includes(entry.id)
+    );
+    
+    // If no unused entry exists, use the first cadastre entry or create a blank one
+    const defaultCadastreEntry = unusedCadastreEntry || 
+      (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
+    
     const newEntry: LandSummaryEntry = {
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-      section: '',
-      parcelle: '',
+      id: Date.now().toString(),
+      section: defaultCadastreEntry.section || '',
+      parcelle: defaultCadastreEntry.parcelle || '',
       occupationType: 'Terrain nu',
       ownerStatus: 'Personne physique',
       ownerDetails: '',
       additionalInfo: '',
       residentStatus: 'Vacants',
-      cadastreId: '' // Will be set when user selects a cadastre entry
+      cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
     };
     
     setEntries(prev => [...prev, newEntry]);
     
-    toast({
-      title: "Nouvelle ligne ajoutée",
-      description: "Vous pouvez maintenant sélectionner une parcelle et remplir les informations.",
-    });
+    // If we used an unused cadastre entry, add it to processed ids
+    if (unusedCadastreEntry) {
+      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
+    }
   };
 
   const handleDeleteEntry = (id: string) => {
     const entryToDelete = entries.find(entry => entry.id === id);
-    
-    // Remove from entries
-    setEntries(prev => prev.filter(entry => entry.id !== id));
-    
-    // If the entry was linked to a cadastre, remove it from processed list
-    // This allows the parcelle to be re-added automatically or manually
     if (entryToDelete && entryToDelete.cadastreId) {
       setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
     }
     
+    setEntries(prev => prev.filter(entry => entry.id !== id));
     if (selectedRow === id) {
       setSelectedRow(null);
     }
     
     toast({
       title: "Ligne supprimée",
-      description: "La parcelle peut maintenant être ajoutée à nouveau si nécessaire.",
+      description: "La ligne a été supprimée avec succès",
     });
   };
 
@@ -228,24 +231,6 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     const currentEntry = entries.find(entry => entry.id === id);
     const oldCadastreId = currentEntry?.cadastreId;
     
-    // If clearing selection (empty value)
-    if (!sectionId) {
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? { 
-          ...entry, 
-          section: '',
-          parcelle: '',
-          cadastreId: ''
-        } : entry
-      ));
-      
-      // Remove old cadastreId from processed list if it existed
-      if (oldCadastreId) {
-        setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== oldCadastreId));
-      }
-      return;
-    }
-    
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
     if (selectedCadastre) {
       setEntries(prev => prev.map(entry => 
@@ -253,21 +238,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           ...entry, 
           section: selectedCadastre.section,
           parcelle: selectedCadastre.parcelle,
-          cadastreId: selectedCadastre.id
+          cadastreId: selectedCadastre.id // Update the link to cadastre
         } : entry
       ));
       
-      // Update processedCadastreIds: remove old, add new
-      setProcessedCadastreIds(prev => {
-        let newIds = prev;
-        if (oldCadastreId && oldCadastreId !== selectedCadastre.id) {
-          newIds = newIds.filter(cadastreId => cadastreId !== oldCadastreId);
-        }
-        if (!newIds.includes(selectedCadastre.id)) {
-          newIds = [...newIds, selectedCadastre.id];
-        }
-        return newIds;
-      });
+      // Update processedCadastreIds to reflect the change
+      if (oldCadastreId) {
+        setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
+      }
+      setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
     }
   };
 
@@ -383,7 +362,6 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                       <SelectValue placeholder="Sélectionner une parcelle" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Aucune parcelle sélectionnée</SelectItem>
                       {cadastreEntries.map((cadastre) => (
                         <SelectItem key={cadastre.id} value={cadastre.id}>
                           {cadastre.section} {cadastre.parcelle}

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { useRecapFoncierDelete } from '@/hooks/useRecapFoncierDelete';
 
 type LandSummaryEntry = {
   tmpId: string; // Stable frontend key
@@ -49,10 +50,18 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
   const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<{
-    open: boolean;
-    entryTmpId: string | null;
-  }>({ open: false, entryTmpId: null });
+
+  // Use the deletion hook
+  const deleteHook = useRecapFoncierDelete({
+    rows: entries.map(entry => ({
+      ...entry,
+      projectId
+    })),
+    setRows: setEntries as any,
+    projectId,
+    processedCadastreIds,
+    setProcessedCadastreIds
+  });
 
   const occupationTypes = [
     "Terrain nu",
@@ -236,91 +245,14 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
-  const handleDeleteEntry = async (tmpId: string) => {
-    const entryToDelete = entries.find(entry => entry.tmpId === tmpId);
-    if (!entryToDelete) return;
-
-    console.log('Deleting entry:', entryToDelete); // Debug log
-
-    // If entry has no Supabase ID, just remove from state
-    if (!entryToDelete.id) {
-      setEntries(prev => prev.filter(entry => entry.tmpId !== tmpId));
-      if (entryToDelete.cadastreId) {
-        setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-        console.log('Removed cadastreId from processed list:', entryToDelete.cadastreId); // Debug log
-      }
-      if (selectedRow === tmpId) {
-        setSelectedRow(null);
-      }
-      toast({
-        title: "Ligne supprimée",
-        description: entryToDelete.cadastreId 
-          ? "Parcelle cadastrale libérée et supprimée avec succès" 
-          : "La ligne a été supprimée avec succès",
-      });
-      return;
-    }
-
-    // Optimistic update: remove from UI immediately
-    const previousEntries = entries;
-    const previousProcessedIds = processedCadastreIds;
-    
-    setEntries(prev => prev.filter(entry => entry.tmpId !== tmpId));
-    if (entryToDelete.cadastreId) {
-      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-      console.log('Removed cadastreId from processed list:', entryToDelete.cadastreId); // Debug log
-    }
-    if (selectedRow === tmpId) {
-      setSelectedRow(null);
-    }
-
-    try {
-      const { error } = await supabase
-        .from('land_recaps')
-        .delete()
-        .match({ id: entryToDelete.id, project_id: projectId });
-
-      if (error) {
-        console.error('Supabase deletion error:', error); // Debug log
-        // Rollback on error
-        setEntries(previousEntries);
-        setProcessedCadastreIds(previousProcessedIds);
-        toast({
-          title: "Erreur",
-          description: "Impossible de supprimer la ligne. Veuillez réessayer.",
-          variant: "destructive",
-        });
-      } else {
-        console.log('Successfully deleted from Supabase:', entryToDelete.id); // Debug log
-        toast({
-          title: "Ligne supprimée",
-          description: entryToDelete.cadastreId 
-            ? "Parcelle cadastrale libérée et supprimée définitivement" 
-            : "La ligne a été supprimée définitivement",
-        });
-      }
-    } catch (err) {
-      console.error('Unexpected deletion error:', err); // Debug log
-      // Rollback on unexpected error
-      setEntries(previousEntries);
-      setProcessedCadastreIds(previousProcessedIds);
-      toast({
-        title: "Erreur",
-        description: "Une erreur inattendue s'est produite.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const confirmDelete = (tmpId: string) => {
-    setDeleteDialog({ open: true, entryTmpId: tmpId });
-  };
-
-  const handleConfirmDelete = () => {
-    if (deleteDialog.entryTmpId) {
-      handleDeleteEntry(deleteDialog.entryTmpId);
+    const entryToDelete = entries.find(entry => entry.tmpId === tmpId);
+    if (entryToDelete) {
+      deleteHook.openConfirm({
+        ...entryToDelete,
+        projectId
+      });
     }
-    setDeleteDialog({ open: false, entryTmpId: null });
   };
 
   const handleInputChange = (tmpId: string, field: keyof Omit<LandSummaryEntry, 'tmpId' | 'id'>, value: string) => {
@@ -575,13 +507,13 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       </div>
 
       <ConfirmDialog
-        open={deleteDialog.open}
-        onOpenChange={(open) => setDeleteDialog({ open, entryTmpId: null })}
+        open={!!deleteHook.target}
+        onOpenChange={(open) => !open && deleteHook.closeConfirm()}
         title="Confirmer la suppression"
         description="Êtes-vous sûr de vouloir supprimer cette ligne ? Cette action est irréversible."
         confirmText="Supprimer"
         cancelText="Annuler"
-        onConfirm={handleConfirmDelete}
+        onConfirm={deleteHook.handleDelete}
         destructive={true}
       />
     </div>

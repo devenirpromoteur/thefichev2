@@ -212,9 +212,25 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
-  const handleDeleteEntry = (id: string) => {
+  const [deletingEntry, setDeletingEntry] = useState<string | null>(null);
+
+  const handleDeleteEntry = async (id: string) => {
+    // Prevent double-click
+    if (deletingEntry === id) return;
+    setDeletingEntry(id);
+
     const entryToDelete = entries.find(entry => entry.id === id);
-    if (entryToDelete && entryToDelete.cadastreId) {
+    if (!entryToDelete) {
+      setDeletingEntry(null);
+      return;
+    }
+
+    // Optimistic update
+    const prevEntries = entries;
+    const prevProcessedIds = processedCadastreIds;
+
+    // Remove from processedCadastreIds if it has a cadastreId
+    if (entryToDelete.cadastreId) {
       setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
     }
     
@@ -222,11 +238,40 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     if (selectedRow === id) {
       setSelectedRow(null);
     }
-    
-    toast({
-      title: "Ligne supprimée",
-      description: "La ligne a été supprimée avec succès",
-    });
+
+    try {
+      // Delete from Supabase if ficheId exists (meaning it's persisted)
+      if (ficheId) {
+        const { error } = await supabase
+          .from('land_recaps')
+          .delete()
+          .eq('id', id)
+          .eq('project_id', ficheId);
+        
+        if (error) throw error;
+      }
+      
+      toast({
+        title: "Ligne supprimée",
+        description: "La ligne a été supprimée avec succès",
+      });
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      // Rollback on error
+      setEntries(prevEntries);
+      setProcessedCadastreIds(prevProcessedIds);
+      if (selectedRow === id) {
+        setSelectedRow(id);
+      }
+      
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer la ligne.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingEntry(null);
+    }
   };
 
   const handleInputChange = (id: string, field: keyof Omit<LandSummaryEntry, 'id'>, value: string) => {
@@ -595,6 +640,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
+                      disabled={deletingEntry === entry.id}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteEntry(entry.id);

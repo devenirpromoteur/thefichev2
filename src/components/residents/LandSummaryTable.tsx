@@ -215,7 +215,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
 
-  const handleAddEntry = () => {
+  const handleAddEntry = async () => {
     // Find a cadastre entry that hasn't been used yet
     const unusedCadastreEntry = cadastreEntries.find(entry => 
       !processedCadastreIds.includes(entry.id)
@@ -243,6 +243,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     if (unusedCadastreEntry) {
       setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
     }
+
+    // Immediately save to Supabase
+    saveToSupabase(newEntry);
   };
 
   const confirmDelete = (tmpId: string) => {
@@ -259,6 +262,72 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     setEntries(prev => prev.map(entry => 
       entry.tmpId === tmpId ? { ...entry, [field]: value } : entry
     ));
+    
+    // Auto-save changes to Supabase
+    const entry = entries.find(e => e.tmpId === tmpId);
+    if (entry?.id) {
+      saveToSupabase({ ...entry, [field]: value });
+    }
+  };
+
+  const saveToSupabase = async (entry: LandSummaryEntry) => {
+    if (!entry.id) {
+      // Insert new entry
+      const { data, error } = await supabase
+        .from('land_recaps')
+        .insert({
+          project_id: projectId,
+          section: entry.section,
+          parcelle: entry.parcelle,
+          occupation_type: entry.occupationType,
+          owner_status: entry.ownerStatus,
+          owner_name: entry.ownerDetails,
+          notes: entry.additionalInfo,
+          resident_status: entry.residentStatus,
+          parcel_id: entry.cadastreId || null
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error inserting land recap:', error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de sauvegarder la ligne.",
+          variant: "destructive",
+        });
+      } else if (data) {
+        // Update local state with Supabase ID
+        setEntries(prev => prev.map(e => 
+          e.tmpId === entry.tmpId ? { ...e, id: data.id } : e
+        ));
+      }
+    } else {
+      // Update existing entry
+      const { error } = await supabase
+        .from('land_recaps')
+        .update({
+          section: entry.section,
+          parcelle: entry.parcelle,
+          occupation_type: entry.occupationType,
+          owner_status: entry.ownerStatus,
+          owner_name: entry.ownerDetails,
+          notes: entry.additionalInfo,
+          resident_status: entry.residentStatus,
+          parcel_id: entry.cadastreId || null
+        })
+        .eq('id', entry.id)
+        .eq('project_id', projectId);
+
+      if (error) {
+        console.error('Error updating land recap:', error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de mettre à jour la ligne.",
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const handleCadastreSelect = (tmpId: string, sectionId: string) => {

@@ -240,18 +240,23 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     const entryToDelete = entries.find(entry => entry.tmpId === tmpId);
     if (!entryToDelete) return;
 
+    console.log('Deleting entry:', entryToDelete); // Debug log
+
     // If entry has no Supabase ID, just remove from state
     if (!entryToDelete.id) {
       setEntries(prev => prev.filter(entry => entry.tmpId !== tmpId));
       if (entryToDelete.cadastreId) {
         setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
+        console.log('Removed cadastreId from processed list:', entryToDelete.cadastreId); // Debug log
       }
       if (selectedRow === tmpId) {
         setSelectedRow(null);
       }
       toast({
         title: "Ligne supprimée",
-        description: "La ligne a été supprimée avec succès",
+        description: entryToDelete.cadastreId 
+          ? "Parcelle cadastrale libérée et supprimée avec succès" 
+          : "La ligne a été supprimée avec succès",
       });
       return;
     }
@@ -263,6 +268,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     setEntries(prev => prev.filter(entry => entry.tmpId !== tmpId));
     if (entryToDelete.cadastreId) {
       setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
+      console.log('Removed cadastreId from processed list:', entryToDelete.cadastreId); // Debug log
     }
     if (selectedRow === tmpId) {
       setSelectedRow(null);
@@ -275,6 +281,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         .match({ id: entryToDelete.id, project_id: projectId });
 
       if (error) {
+        console.error('Supabase deletion error:', error); // Debug log
         // Rollback on error
         setEntries(previousEntries);
         setProcessedCadastreIds(previousProcessedIds);
@@ -284,12 +291,16 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           variant: "destructive",
         });
       } else {
+        console.log('Successfully deleted from Supabase:', entryToDelete.id); // Debug log
         toast({
           title: "Ligne supprimée",
-          description: "La ligne a été supprimée avec succès",
+          description: entryToDelete.cadastreId 
+            ? "Parcelle cadastrale libérée et supprimée définitivement" 
+            : "La ligne a été supprimée définitivement",
         });
       }
     } catch (err) {
+      console.error('Unexpected deletion error:', err); // Debug log
       // Rollback on unexpected error
       setEntries(previousEntries);
       setProcessedCadastreIds(previousProcessedIds);

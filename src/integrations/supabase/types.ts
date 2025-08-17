@@ -106,6 +106,45 @@ export type Database = {
           },
         ]
       }
+      land_recaps: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string
+          occupation_type: string
+          owner_name: string
+          owner_status: string
+          parcel_id: string | null
+          project_id: string
+          resident_status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string
+          occupation_type?: string
+          owner_name?: string
+          owner_status?: string
+          parcel_id?: string | null
+          project_id: string
+          resident_status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string
+          occupation_type?: string
+          owner_name?: string
+          owner_status?: string
+          parcel_id?: string | null
+          project_id?: string
+          resident_status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       plu_servitudes: {
         Row: {
           created_at: string

@@ -260,8 +260,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   };
 
   const handleClearParcel = async (entryId: string) => {
+    console.log('handleClearParcel called with entryId:', entryId);
+    
     const currentEntry = entries.find(entry => entry.id === entryId);
-    if (!currentEntry) return;
+    if (!currentEntry) {
+      console.log('No entry found for id:', entryId);
+      return;
+    }
+
+    console.log('Current entry before clear:', currentEntry);
 
     // Optimistic update
     const prevEntries = entries;
@@ -277,6 +284,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     // Remove from processedCadastreIds
     if (currentEntry.cadastreId) {
       setProcessedCadastreIds(prev => prev.filter(id => id !== currentEntry.cadastreId));
+      console.log('Removed cadastreId from processed:', currentEntry.cadastreId);
     }
 
     try {
@@ -289,6 +297,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         description: "La sélection de parcelle a été supprimée.",
       });
     } catch (error) {
+      console.error('Error clearing parcel:', error);
       // Rollback on error
       setEntries(prevEntries);
       if (currentEntry.cadastreId) {

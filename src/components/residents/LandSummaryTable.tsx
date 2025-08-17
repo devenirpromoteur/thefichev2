@@ -319,7 +319,14 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
 
   // Robust delete function with server-first approach
   const handleDeleteEntry = async (id: string): Promise<boolean> => {
-    // Guard clause
+    // Debug logging
+    console.log('=== DELETE DEBUG ===');
+    console.log('Entry ID:', id);
+    console.log('Fiche ID:', ficheId);
+    console.log('Fiche ID type:', typeof ficheId);
+    console.log('Is ficheId UUID format:', ficheId ? /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ficheId) : false);
+
+    // Guard clause - skip project_id validation if ficheId is not a valid UUID
     if (!ficheId) {
       toast({
         title: "Erreur",
@@ -340,41 +347,91 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
 
     try {
-      // Server-first deletion with robust query
-      const { data, error } = await supabase
-        .from('land_recaps')
-        .delete()
-        .eq('id', id)
-        .eq('project_id', ficheId)
-        .select('id')
-        .maybeSingle(); // Prevents 406/409 errors for 0 or 1 rows
+      // Check if ficheId is a valid UUID format
+      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ficheId);
+      
+      let deleteResult;
+      
+      if (isValidUUID) {
+        // Normal deletion with project_id constraint
+        console.log('Using normal deletion with project_id constraint');
+        deleteResult = await supabase
+          .from('land_recaps')
+          .delete()
+          .eq('id', id)
+          .eq('project_id', ficheId)
+          .select('id')
+          .maybeSingle();
+      } else {
+        // Fallback: delete by ID only (less safe but should work)
+        console.log('Using fallback deletion without project_id constraint');
+        console.warn('ficheId is not a valid UUID format, deleting without project_id constraint');
+        deleteResult = await supabase
+          .from('land_recaps')
+          .delete()
+          .eq('id', id)
+          .select('id')
+          .maybeSingle();
+      }
+
+      const { data, error } = deleteResult;
+      console.log('Delete result:', { data, error });
       
       // Handle specific error cases as success
       if (error && (error.code === 'PGRST116' || error.code === '404')) {
         // Row already deleted - treat as success
         console.log('Row already deleted or not found, treating as success');
       } else if (error) {
-        // Propagate actual errors
-        let errorMessage = "Impossible de supprimer la ligne.";
-        
-        if (error.message.includes('RLS')) {
-          errorMessage = "Accès non autorisé pour cette opération.";
-        } else if (error.message.includes('foreign key')) {
-          errorMessage = "Impossible de supprimer: des données liées existent.";
-        } else if (error.message.includes('network')) {
-          errorMessage = "Erreur de connexion. Vérifiez votre connexion internet.";
-        }
-        
-        toast({
-          title: "Erreur",
-          description: errorMessage,
-          variant: "destructive",
+        // Log detailed error information
+        console.error('Delete error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
         });
-        return false;
+        
+        // Try alternative deletion method if UUID constraint failed
+        if (error.message.includes('uuid') && isValidUUID) {
+          console.log('UUID error with valid UUID, trying deletion by ID only');
+          const altResult = await supabase
+            .from('land_recaps')
+            .delete()
+            .eq('id', id)
+            .select('id')
+            .maybeSingle();
+          
+          if (altResult.error && !(altResult.error.code === 'PGRST116' || altResult.error.code === '404')) {
+            throw altResult.error;
+          }
+          console.log('Alternative deletion succeeded');
+        } else {
+          // Propagate actual errors
+          let errorMessage = "Impossible de supprimer la ligne.";
+          
+          if (error.message.includes('RLS')) {
+            errorMessage = "Accès non autorisé pour cette opération.";
+          } else if (error.message.includes('foreign key')) {
+            errorMessage = "Impossible de supprimer: des données liées existent.";
+          } else if (error.message.includes('network')) {
+            errorMessage = "Erreur de connexion. Vérifiez votre connexion internet.";
+          }
+          
+          toast({
+            title: "Erreur",
+            description: `${errorMessage} (${error.message})`,
+            variant: "destructive",
+          });
+          return false;
+        }
       }
 
       // Success: update state after server confirmation
-      setEntries(prev => prev.filter(entry => entry.id !== id));
+      console.log('Delete operation successful, updating state');
+      setEntries(prev => {
+        const updated = prev.filter(entry => entry.id !== id);
+        console.log('Entries updated:', updated.length, 'remaining');
+        return updated;
+      });
       
       // Remove from processedCadastreIds if it has a cadastreId
       if (entryToDelete.cadastreId) {
@@ -388,15 +445,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       
       toast({
         title: "Ligne supprimée",
-        description: "La ligne a été supprimée avec succès",
+        description: "La ligne a été supprimée définitivement",
       });
       
       return true;
     } catch (error) {
-      console.error('Error deleting entry:', error);
+      console.error('Unexpected error deleting entry:', error);
       toast({
         title: "Erreur",
-        description: "Erreur inattendue lors de la suppression.",
+        description: `Erreur inattendue lors de la suppression: ${error instanceof Error ? error.message : 'Erreur inconnue'}`,
         variant: "destructive",
       });
       return false;

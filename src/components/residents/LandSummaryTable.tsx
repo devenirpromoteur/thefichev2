@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
 
 // Generate a UUID v4
 const generateUUID = () => {
@@ -234,36 +235,77 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     ));
   };
 
-  const handleCadastreSelect = (id: string, sectionId: string) => {
+  // Supabase update function
+  const updateRowParcel = async (entryId: string, parcelId: string | null) => {
+    if (!ficheId) throw new Error('Project ID is required');
+    
+    const { error } = await supabase
+      .from('land_recaps')
+      .update({ parcel_id: parcelId })
+      .eq('id', entryId)
+      .eq('project_id', ficheId)
+      .select('id')
+      .single();
+    
+    if (error) throw error;
+  };
+
+  const handleCadastreSelect = async (id: string, sectionId: string) => {
     // Find the current entry and its current cadastreId
     const currentEntry = entries.find(entry => entry.id === id);
     const oldCadastreId = currentEntry?.cadastreId;
     
     const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
-    if (selectedCadastre) {
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? { 
-          ...entry, 
-          section: selectedCadastre.section,
-          parcelle: selectedCadastre.parcelle,
-          cadastreId: selectedCadastre.id // Update the link to cadastre
-        } : entry
-      ));
+    if (!selectedCadastre) return;
+
+    // Optimistic update
+    const prevEntries = entries;
+    const prevProcessedIds = processedCadastreIds;
+    
+    setEntries(prev => prev.map(entry => 
+      entry.id === id ? { 
+        ...entry, 
+        section: selectedCadastre.section,
+        parcelle: selectedCadastre.parcelle,
+        cadastreId: selectedCadastre.id
+      } : entry
+    ));
+    
+    // Update processedCadastreIds to reflect the change
+    if (oldCadastreId) {
+      setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
+    }
+    setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
+
+    try {
+      // Persist to Supabase
+      await updateRowParcel(id, sectionId);
+    } catch (error) {
+      console.error('Error updating parcel selection:', error);
+      // Rollback on error
+      setEntries(prevEntries);
+      setProcessedCadastreIds(prevProcessedIds);
       
-      // Update processedCadastreIds to reflect the change
-      if (oldCadastreId) {
-        setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
-      }
-      setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
+      toast({
+        title: "Erreur",
+        description: "Impossible de sauvegarder la sélection de parcelle.",
+        variant: "destructive",
+      });
     }
   };
+
+  const [clearingParcel, setClearingParcel] = useState<string | null>(null);
 
   const handleClearParcel = async (entryId: string) => {
     console.log('handleClearParcel called with entryId:', entryId);
     
+    // Prevent double-click
+    if (clearingParcel === entryId) return;
+    setClearingParcel(entryId);
+    
     const currentEntry = entries.find(entry => entry.id === entryId);
     if (!currentEntry) {
-      console.log('No entry found for id:', entryId);
+      setClearingParcel(null);
       return;
     }
 
@@ -271,6 +313,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
 
     // Optimistic update
     const prevEntries = entries;
+    const prevProcessedIds = processedCadastreIds;
+    
     setEntries(prev => prev.map(entry => 
       entry.id === entryId ? { 
         ...entry, 
@@ -287,9 +331,9 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
 
     try {
-      // Update in database (set parcel_id to null)
-      // This would be done via Supabase when implemented
-      console.log('Clearing parcel for entry:', entryId);
+      // Persist to Supabase (set parcel_id to null)
+      await updateRowParcel(entryId, null);
+      console.log('Successfully cleared parcel for entry:', entryId);
       
       toast({
         title: "Parcelle effacée",
@@ -299,15 +343,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       console.error('Error clearing parcel:', error);
       // Rollback on error
       setEntries(prevEntries);
-      if (currentEntry.cadastreId) {
-        setProcessedCadastreIds(prev => [...prev, currentEntry.cadastreId]);
-      }
+      setProcessedCadastreIds(prevProcessedIds);
       
       toast({
         title: "Erreur",
         description: "Impossible d'effacer la parcelle.",
         variant: "destructive",
       });
+    } finally {
+      setClearingParcel(null);
     }
   };
 
@@ -449,6 +493,7 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={clearingParcel === entry.id}
                                 className="h-8 w-8"
                                 onClick={(e) => {
                                   e.stopPropagation();

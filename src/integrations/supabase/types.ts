@@ -143,15 +143,7 @@ export type Database = {
           resident_status?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "land_recaps_parcel_id_fkey"
-            columns: ["parcel_id"]
-            isOneToOne: false
-            referencedRelation: "land_recaps"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       plu_servitudes: {
         Row: {

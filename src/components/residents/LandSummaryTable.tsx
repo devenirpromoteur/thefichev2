@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell 
 } from '@/components/ui/table';
@@ -13,17 +13,16 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
 } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
 
 type LandSummaryEntry = {
   id: string;
-  section: string;
-  parcelle: string;
-  occupationType: string;
-  ownerStatus: string;
-  ownerDetails: string;
-  additionalInfo: string;
-  residentStatus: string;
-  cadastreId: string; // Added to track the source cadastre entry
+  parcel_id: string | null;
+  occupation_type: string;
+  owner_status: string;
+  owner_name: string;
+  notes: string;
+  resident_status: string;
 };
 
 interface LandSummaryTableProps {
@@ -40,10 +39,13 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
   cadastreEntries 
 }) => {
   const { toast } = useToast();
-  const [entries, setEntries] = useState<LandSummaryEntry[]>([]);
+  const [rows, setRows] = useState<LandSummaryEntry[]>([]);
   const [selectedRow, setSelectedRow] = useState<string | null>(null);
-  const [processedCadastreIds, setProcessedCadastreIds] = useState<string[]>([]);
-  const [initialized, setInitialized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const updateTimeoutRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  const projectId = ficheId; // ficheId is project_id
 
   const occupationTypes = [
     "Terrain nu",
@@ -71,211 +73,225 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     "Autres"
   ];
 
-  // Load saved land summary values once on component mount
-  useEffect(() => {
-    if (ficheId && !initialized) {
-      const storedData = localStorage.getItem(`landSummary_${ficheId}`);
-      if (storedData) {
-        const parsedData = JSON.parse(storedData);
-        setEntries(parsedData);
-        setProcessedCadastreIds(parsedData.filter((entry: LandSummaryEntry) => entry.cadastreId).map((entry: LandSummaryEntry) => entry.cadastreId));
-      }
-      setInitialized(true);
+  // Load data from Supabase
+  const loadRows = useCallback(async () => {
+    if (!projectId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('land_recaps')
+        .select('id, parcel_id, occupation_type, owner_status, owner_name, notes, resident_status')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setRows(data || []);
+    } catch (error) {
+      console.error('Error loading land recaps:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les données",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
     }
-  }, [ficheId, initialized]);
+  }, [projectId, toast]);
 
-  // Synchronize with cadastre entries only after initialization
+  // Load data on mount
   useEffect(() => {
-    if (!initialized || !cadastreEntries.length || !ficheId) return;
+    loadRows();
+  }, [loadRows]);
 
-    // Find cadastre entries that don't have a corresponding land summary entry
+  // Synchronize with cadastre entries - add new parcels
+  useEffect(() => {
+    if (loading || !cadastreEntries.length || !projectId) return;
+
+    const existingParcelIds = rows.map(row => row.parcel_id).filter(Boolean);
     const newCadastreEntries = cadastreEntries.filter(
-      cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
+      entry => !existingParcelIds.includes(entry.id)
     );
 
     if (newCadastreEntries.length > 0) {
-      const newLandSummaryEntries: LandSummaryEntry[] = newCadastreEntries.map(cadastreEntry => ({
-        id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
-        section: cadastreEntry.section || '',
-        parcelle: cadastreEntry.parcelle || '',
-        occupationType: 'Terrain nu',
-        ownerStatus: 'Personne physique',
-        ownerDetails: '',
-        additionalInfo: '',
-        residentStatus: 'Vacants',
-        cadastreId: cadastreEntry.id
-      }));
-
-      setEntries(prev => [...prev, ...newLandSummaryEntries]);
-      setProcessedCadastreIds(prev => [...prev, ...newCadastreEntries.map(entry => entry.id)]);
+      // Add new entries for new parcels automatically
+      newCadastreEntries.forEach(cadastreEntry => {
+        addRowFromCadastre(cadastreEntry);
+      });
       
       toast({
         title: "Nouvelles parcelles ajoutées",
-        description: `${newLandSummaryEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
+        description: `${newCadastreEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
       });
     }
+  }, [cadastreEntries, rows, loading, projectId]);
 
-    // Check for deleted cadastre entries and remove corresponding land summary entries
-    const existingCadastreIds = cadastreEntries.map(entry => entry.id);
-    const entriesWithDeletedCadastre = entries.filter(
-      entry => entry.cadastreId && !existingCadastreIds.includes(entry.cadastreId)
-    );
+  // Add row from cadastre entry
+  const addRowFromCadastre = async (cadastreEntry: { id: string; section: string; parcelle: string }) => {
+    if (!projectId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('land_recaps')
+        .insert({ 
+          project_id: projectId, 
+          parcel_id: cadastreEntry.id,
+          occupation_type: 'Terrain nu', 
+          owner_status: 'Personne physique', 
+          owner_name: '',
+          notes: '',
+          resident_status: 'Vacants' 
+        })
+        .select('id, parcel_id, occupation_type, owner_status, owner_name, notes, resident_status')
+        .single();
 
-    if (entriesWithDeletedCadastre.length > 0) {
-      setEntries(prev => prev.filter(entry => 
-        !entry.cadastreId || existingCadastreIds.includes(entry.cadastreId)
-      ));
-      
-      // Update processedCadastreIds to remove deleted entries
-      setProcessedCadastreIds(prev => prev.filter(id => existingCadastreIds.includes(id)));
+      if (error) throw error;
+      setRows(prevRows => [data, ...prevRows]);
+    } catch (error) {
+      console.error('Error adding row from cadastre:', error);
+    }
+  };
+
+  // Add row manually
+  const addRow = async () => {
+    if (!projectId || adding) return;
+    
+    setAdding(true);
+    try {
+      const { data, error } = await supabase
+        .from('land_recaps')
+        .insert({ 
+          project_id: projectId, 
+          occupation_type: '', 
+          owner_status: '', 
+          owner_name: '',
+          notes: '',
+          resident_status: '' 
+        })
+        .select('id, parcel_id, occupation_type, owner_status, owner_name, notes, resident_status')
+        .single();
+
+      if (error) throw error;
+      setRows(prevRows => [data, ...prevRows]);
       
       toast({
-        title: "Parcelles supprimées",
-        description: `${entriesWithDeletedCadastre.length} parcelle(s) supprimée(s) suite à leur suppression dans le module Cadastre.`,
+        title: "Ligne ajoutée",
+        description: "Nouvelle ligne ajoutée avec succès"
+      });
+    } catch (error) {
+      console.error('Error adding row:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter la ligne",
+        variant: "destructive"
+      });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  // Delete row with optimistic update and rollback
+  const deleteRow = async (row: LandSummaryEntry) => {
+    if (!projectId) return;
+    
+    const prevRows = rows;
+    setRows(r => r.filter(x => x.id !== row.id));
+
+    if (!row.id) return; // temporary row not persisted
+
+    try {
+      const { error } = await supabase
+        .from('land_recaps')
+        .delete()
+        .eq('id', row.id)
+        .eq('project_id', projectId);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Ligne supprimée",
+        description: "La ligne a été supprimée avec succès"
+      });
+    } catch (error) {
+      console.error('Error deleting row:', error);
+      setRows(prevRows); // Rollback
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer la ligne",
+        variant: "destructive"
       });
     }
+  };
 
-    // Update section/parcelle info for existing entries if they changed in cadastre
-    let updatedEntries = false;
-    const newEntries = entries.map(entry => {
-      if (entry.cadastreId) {
-        const correspondingCadastreEntry = cadastreEntries.find(
-          cadastreEntry => cadastreEntry.id === entry.cadastreId
-        );
-        
-        if (correspondingCadastreEntry && 
-            (entry.section !== correspondingCadastreEntry.section || 
-             entry.parcelle !== correspondingCadastreEntry.parcelle)) {
-          updatedEntries = true;
-          return {
-            ...entry,
-            section: correspondingCadastreEntry.section,
-            parcelle: correspondingCadastreEntry.parcelle
-          };
-        }
+  // Debounced update for inline changes
+  const debouncedUpdate = useCallback((rowId: string, field: keyof Omit<LandSummaryEntry, 'id'>, value: string) => {
+    if (!projectId) return;
+    
+    // Clear existing timeout
+    if (updateTimeoutRef.current[rowId]) {
+      clearTimeout(updateTimeoutRef.current[rowId]);
+    }
+
+    // Set new timeout
+    updateTimeoutRef.current[rowId] = setTimeout(async () => {
+      try {
+        const { error } = await supabase
+          .from('land_recaps')
+          .update({ [field]: value })
+          .eq('id', rowId)
+          .eq('project_id', projectId);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error('Error updating field:', error);
+        toast({
+          title: "Erreur de sauvegarde",
+          description: "Impossible de sauvegarder les modifications",
+          variant: "destructive"
+        });
       }
-      return entry;
-    });
+    }, 500); // 500ms debounce
+  }, [projectId, toast]);
 
-    if (updatedEntries) {
-      setEntries(newEntries);
-      toast({
-        title: "Parcelles mises à jour",
-        description: "Les informations des parcelles ont été mises à jour suite à des modifications dans le module Cadastre.",
-      });
-    }
-  }, [cadastreEntries, processedCadastreIds, ficheId, toast, entries, initialized]);
-
-  // Save changes to localStorage
-  useEffect(() => {
-    if (ficheId && entries.length > 0 && initialized) {
-      localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(entries));
-    }
-  }, [entries, ficheId, initialized]);
-
-  const handleAddEntry = () => {
-    // Find a cadastre entry that hasn't been used yet
-    const unusedCadastreEntry = cadastreEntries.find(entry => 
-      !processedCadastreIds.includes(entry.id)
-    );
-    
-    // If no unused entry exists, use the first cadastre entry or create a blank one
-    const defaultCadastreEntry = unusedCadastreEntry || 
-      (cadastreEntries.length > 0 ? cadastreEntries[0] : { id: '', section: '', parcelle: '' });
-    
-    const newEntry: LandSummaryEntry = {
-      id: Date.now().toString(),
-      section: defaultCadastreEntry.section || '',
-      parcelle: defaultCadastreEntry.parcelle || '',
-      occupationType: 'Terrain nu',
-      ownerStatus: 'Personne physique',
-      ownerDetails: '',
-      additionalInfo: '',
-      residentStatus: 'Vacants',
-      cadastreId: defaultCadastreEntry.id || '' // Link to cadastre entry if available
-    };
-    
-    setEntries(prev => [...prev, newEntry]);
-    
-    // If we used an unused cadastre entry, add it to processed ids
-    if (unusedCadastreEntry) {
-      setProcessedCadastreIds(prev => [...prev, unusedCadastreEntry.id]);
-    }
-  };
-
-  const handleDeleteEntry = (id: string) => {
-    const entryToDelete = entries.find(entry => entry.id === id);
-    if (entryToDelete && entryToDelete.cadastreId) {
-      setProcessedCadastreIds(prev => prev.filter(cadastreId => cadastreId !== entryToDelete.cadastreId));
-    }
-    
-    setEntries(prev => prev.filter(entry => entry.id !== id));
-    if (selectedRow === id) {
-      setSelectedRow(null);
-    }
-    
-    toast({
-      title: "Ligne supprimée",
-      description: "La ligne a été supprimée avec succès",
-    });
-  };
-
+  // Handle input changes with optimistic update
   const handleInputChange = (id: string, field: keyof Omit<LandSummaryEntry, 'id'>, value: string) => {
-    setEntries(prev => prev.map(entry => 
+    // Optimistic update
+    setRows(prev => prev.map(entry => 
       entry.id === id ? { ...entry, [field]: value } : entry
     ));
+    
+    // Debounced save
+    debouncedUpdate(id, field, value);
   };
 
-  const handleCadastreSelect = (id: string, sectionId: string) => {
-    // Find the current entry and its current cadastreId
-    const currentEntry = entries.find(entry => entry.id === id);
-    const oldCadastreId = currentEntry?.cadastreId;
-    
-    const selectedCadastre = cadastreEntries.find(entry => entry.id === sectionId);
-    if (selectedCadastre) {
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? { 
-          ...entry, 
-          section: selectedCadastre.section,
-          parcelle: selectedCadastre.parcelle,
-          cadastreId: selectedCadastre.id // Update the link to cadastre
-        } : entry
-      ));
-      
-      // Update processedCadastreIds to reflect the change
-      if (oldCadastreId) {
-        setProcessedCadastreIds(prev => prev.filter(id => id !== oldCadastreId));
-      }
-      setProcessedCadastreIds(prev => [...prev, selectedCadastre.id]);
+  // Handle parcel selection
+  const handleParcelSelect = (id: string, parcelId: string) => {
+    const selectedParcel = cadastreEntries.find(entry => entry.id === parcelId);
+    if (selectedParcel) {
+      handleInputChange(id, 'parcel_id', parcelId);
     }
   };
 
+  // Handle search owner (simulate API call)
   const handleSearchOwner = (id: string) => {
-    const entry = entries.find(entry => entry.id === id);
+    const entry = rows.find(entry => entry.id === id);
     if (!entry) return;
 
     let searchDetails = '';
     
-    if (entry.ownerStatus === 'Personne morale') {
-      // Simulate API call to Pappers API for company information
+    if (entry.owner_status === 'Personne morale') {
       setTimeout(() => {
         searchDetails = "SCI IMMOBILIER MODERNE\nSIRET: 123456789\nCapital: 100,000€\nCA: 580,000€\nDirigeant: Jean Dupont";
-        setEntries(prev => prev.map(e => 
-          e.id === id ? { ...e, ownerDetails: searchDetails } : e
-        ));
+        handleInputChange(id, 'owner_name', searchDetails);
         
         toast({
           title: "Informations trouvées",
           description: "Données récupérées depuis Pappers Immobilier",
         });
       }, 1000);
-    } else if (entry.ownerStatus === 'Personne physique') {
-      // Simulate API call to Pages Jaunes or equivalent
+    } else if (entry.owner_status === 'Personne physique') {
       setTimeout(() => {
         searchDetails = "M. Pierre Martin\nTél: 01.XX.XX.XX.XX\nAdresse: 10 rue des Lilas, 75000 Paris";
-        setEntries(prev => prev.map(e => 
-          e.id === id ? { ...e, ownerDetails: searchDetails } : e
-        ));
+        handleInputChange(id, 'owner_name', searchDetails);
         
         toast({
           title: "Informations trouvées",
@@ -285,6 +301,17 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-enter opacity-0">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-brand">Récapitulatif foncier</h2>
+        </div>
+        <div className="text-center py-8">Chargement...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 animate-enter opacity-0">
       <div className="flex justify-between items-center">
@@ -293,7 +320,8 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={handleAddEntry}
+            onClick={addRow}
+            disabled={adding}
             className="flex items-center gap-1"
           >
             <Plus className="h-4 w-4" /> Ajouter
@@ -347,124 +375,129 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((entry) => (
-              <TableRow 
-                key={entry.id}
-                onClick={() => setSelectedRow(entry.id)}
-                className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
-              >
-                <TableCell>
-                  <Select 
-                    value={entry.cadastreId || ""}
-                    onValueChange={(value) => handleCadastreSelect(entry.id, value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue placeholder="Sélectionner une parcelle" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cadastreEntries.map((cadastre) => (
-                        <SelectItem key={cadastre.id} value={cadastre.id}>
-                          {cadastre.section} {cadastre.parcelle}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.occupationType} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'occupationType', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {occupationTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.ownerStatus} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'ownerStatus', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ownerStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center space-x-2">
+            {rows.map((entry) => {
+              const linkedCadastre = cadastreEntries.find(c => c.id === entry.parcel_id);
+              return (
+                <TableRow 
+                  key={entry.id}
+                  onClick={() => setSelectedRow(entry.id)}
+                  className={`cursor-pointer transition-colors ${selectedRow === entry.id ? 'bg-brand/5' : ''} hover:bg-brand/5`}
+                >
+                  <TableCell>
+                    <Select 
+                      value={entry.parcel_id || ""}
+                      onValueChange={(value) => handleParcelSelect(entry.id, value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Sélectionner une parcelle">
+                          {linkedCadastre && `${linkedCadastre.section} ${linkedCadastre.parcelle}`}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cadastreEntries.map((cadastre) => (
+                          <SelectItem key={cadastre.id} value={cadastre.id}>
+                            {cadastre.section} {cadastre.parcelle}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.occupation_type} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'occupation_type', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {occupationTypes.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.owner_status} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'owner_status', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ownerStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center space-x-2">
+                      <Input 
+                        value={entry.owner_name}
+                        onChange={(e) => handleInputChange(entry.id, 'owner_name', e.target.value)}
+                        className="h-8"
+                        placeholder="Détails du propriétaire"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSearchOwner(entry.id);
+                        }}
+                        className="h-8 w-8"
+                      >
+                        <Search className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <Input 
-                      value={entry.ownerDetails}
-                      onChange={(e) => handleInputChange(entry.id, 'ownerDetails', e.target.value)}
+                      value={entry.notes}
+                      onChange={(e) => handleInputChange(entry.id, 'notes', e.target.value)}
                       className="h-8"
-                      placeholder="Détails du propriétaire"
+                      placeholder="Informations complémentaires"
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Select 
+                      value={entry.resident_status} 
+                      onValueChange={(value) => handleInputChange(entry.id, 'resident_status', value)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {residentStatusOptions.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="icon"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSearchOwner(entry.id);
+                        deleteRow(entry);
                       }}
-                      className="h-8 w-8"
+                      className="h-8 w-8 text-destructive hover:text-destructive/90"
                     >
-                      <Search className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                     </Button>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Input 
-                    value={entry.additionalInfo}
-                    onChange={(e) => handleInputChange(entry.id, 'additionalInfo', e.target.value)}
-                    className="h-8"
-                    placeholder="Informations complémentaires"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={entry.residentStatus} 
-                    onValueChange={(value) => handleInputChange(entry.id, 'residentStatus', value)}
-                  >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {residentStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteEntry(entry.id);
-                    }}
-                    className="h-8 w-8 text-destructive hover:text-destructive/90"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

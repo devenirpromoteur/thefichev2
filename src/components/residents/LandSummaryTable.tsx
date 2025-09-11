@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from '@/components/ui/select';
-import { Plus, Info, Trash2, Search } from 'lucide-react';
+import { Plus, Info, Trash2, Search, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger 
@@ -81,17 +81,40 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
     }
   }, [entries, isLoading]);
 
-  // Synchronize with cadastre entries
-  useEffect(() => {
-    if (isLoading || !cadastreEntries.length || !ficheId) return;
+  // State for import preview
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [pendingImports, setPendingImports] = useState<Array<{
+    id: string;
+    section: string;
+    parcelle: string;
+  }>>([]);
 
-    // Find new cadastre entries to add
-    const newCadastreEntries = cadastreEntries.filter(
+  // Get new cadastre entries that haven't been imported yet
+  const getNewCadastreEntries = () => {
+    return cadastreEntries.filter(
       cadastreEntry => !processedCadastreIds.includes(cadastreEntry.id)
     );
+  };
+
+  const handleImportFromCadastre = () => {
+    const newEntries = getNewCadastreEntries();
+    if (newEntries.length === 0) {
+      toast({
+        title: "Aucune nouvelle parcelle",
+        description: "Toutes les parcelles du cadastre ont déjà été importées.",
+      });
+      return;
+    }
+    
+    setPendingImports(newEntries);
+    setShowImportPreview(true);
+  };
+
+  const confirmImport = async () => {
+    if (!ficheId) return;
 
     // Add new entries
-    newCadastreEntries.forEach(async (cadastreEntry) => {
+    for (const cadastreEntry of pendingImports) {
       await addEntry({
         ficheId,
         section: cadastreEntry.section || '',
@@ -103,15 +126,21 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         residentStatus: 'Vacants',
         cadastreId: cadastreEntry.id
       });
-    });
-
-    if (newCadastreEntries.length > 0) {
-      toast({
-        title: "Nouvelles parcelles ajoutées",
-        description: `${newCadastreEntries.length} nouvelle(s) parcelle(s) ajoutée(s) depuis le module Cadastre.`,
-      });
     }
-  }, [cadastreEntries, processedCadastreIds, ficheId, isLoading, addEntry, toast]);
+
+    toast({
+      title: "Parcelles importées",
+      description: `${pendingImports.length} parcelle(s) importée(s) depuis le module Cadastre.`,
+    });
+    
+    setShowImportPreview(false);
+    setPendingImports([]);
+  };
+
+  const cancelImport = () => {
+    setShowImportPreview(false);
+    setPendingImports([]);
+  };
 
   const handleAddEntry = async () => {
     if (!ficheId) return;
@@ -205,6 +234,15 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-brand">Récapitulatif foncier</h2>
           <div className="flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleImportFromCadastre}
+              className="flex items-center gap-1"
+              disabled={getNewCadastreEntries().length === 0}
+            >
+              <Download className="h-4 w-4" /> Importer du cadastre
+            </Button>
             <Button 
               variant="outline" 
               size="sm" 
@@ -395,6 +433,35 @@ export const LandSummaryTable: React.FC<LandSummaryTableProps> = ({
       onConfirm={handleConfirmDelete}
       destructive
     />
+
+    {showImportPreview && (
+      <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="bg-card border rounded-lg p-6 max-w-md w-full mx-4 shadow-lg">
+          <h3 className="text-lg font-semibold mb-4">Importer des parcelles</h3>
+          <div className="space-y-3 mb-6">
+            <p className="text-sm">Les parcelles suivantes vont être importées depuis le module Cadastre :</p>
+            <div className="max-h-32 overflow-y-auto bg-muted/30 rounded p-3">
+              {pendingImports.map((entry, index) => (
+                <div key={entry.id} className="text-sm py-1">
+                  {index + 1}. {entry.section} {entry.parcelle}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Chaque parcelle sera ajoutée avec les valeurs par défaut que vous pourrez modifier ensuite.
+            </p>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={cancelImport}>
+              Annuler
+            </Button>
+            <Button onClick={confirmImport}>
+              Importer
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
   </>
   );
 };

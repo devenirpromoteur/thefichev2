@@ -14,190 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
-      cadastre_servitudes: {
+      fiches: {
         Row: {
-          created_at: string
-          id: string
-          notes: string | null
-          present: boolean
-          project_id: string
-          type: string
-          type_key: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          present?: boolean
-          project_id: string
-          type: string
-          type_key: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          present?: boolean
-          project_id?: string
-          type?: string
-          type_key?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      existing_values: {
-        Row: {
-          abatt: number | null
           created_at: string | null
-          dvf: number | null
-          etat: number | null
           id: string
-          notes: string | null
-          parcel_code: string | null
-          parcel_section: string | null
-          price_m2: number | null
-          price_unit: number | null
-          project_id: string
-          surface_or_count: number | null
-          tcap: number | null
-          type: string
-        }
-        Insert: {
-          abatt?: number | null
-          created_at?: string | null
-          dvf?: number | null
-          etat?: number | null
-          id?: string
-          notes?: string | null
-          parcel_code?: string | null
-          parcel_section?: string | null
-          price_m2?: number | null
-          price_unit?: number | null
-          project_id: string
-          surface_or_count?: number | null
-          tcap?: number | null
-          type: string
-        }
-        Update: {
-          abatt?: number | null
-          created_at?: string | null
-          dvf?: number | null
-          etat?: number | null
-          id?: string
-          notes?: string | null
-          parcel_code?: string | null
-          parcel_section?: string | null
-          price_m2?: number | null
-          price_unit?: number | null
-          project_id?: string
-          surface_or_count?: number | null
-          tcap?: number | null
-          type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "existing_values_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      plu_servitudes: {
-        Row: {
-          created_at: string
-          id: string
-          notes: string | null
-          project_id: string
-          type_key: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          project_id: string
-          type_key: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          project_id?: string
-          type_key?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "plu_servitudes_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string | null
-          full_name: string | null
-          org_id: string | null
+          title: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
-          avatar_url?: string | null
           created_at?: string | null
-          full_name?: string | null
-          org_id?: string | null
+          id: string
+          title?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
-          avatar_url?: string | null
           created_at?: string | null
-          full_name?: string | null
-          org_id?: string | null
+          id?: string
+          title?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
       }
-      projects: {
+      profiles: {
         Row: {
           created_at: string | null
-          description: string | null
+          full_name: string | null
           id: string
-          name: string
-          org_id: string | null
-          owner_id: string
           updated_at: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string | null
-          description?: string | null
+          full_name?: string | null
           id?: string
-          name: string
-          org_id?: string | null
-          owner_id: string
           updated_at?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string | null
-          description?: string | null
+          full_name?: string | null
           id?: string
-          name?: string
-          org_id?: string | null
-          owner_id?: string
           updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
+      }
+      recapitulatif_foncier_rows: {
+        Row: {
+          additional_info: string | null
+          cadastre_id: string | null
+          created_at: string | null
+          fiche_id: string
+          id: string
+          occupation_type: string
+          owner_details: string | null
+          owner_status: string
+          parcelle: string | null
+          resident_status: string
+          section: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          additional_info?: string | null
+          cadastre_id?: string | null
+          created_at?: string | null
+          fiche_id: string
+          id?: string
+          occupation_type: string
+          owner_details?: string | null
+          owner_status: string
+          parcelle?: string | null
+          resident_status: string
+          section?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          additional_info?: string | null
+          cadastre_id?: string | null
+          created_at?: string | null
+          fiche_id?: string
+          id?: string
+          occupation_type?: string
+          owner_details?: string | null
+          owner_status?: string
+          parcelle?: string | null
+          resident_status?: string
+          section?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_fiche"
+            columns: ["fiche_id"]
+            isOneToOne: false
+            referencedRelation: "fiches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      user_owns_fiche: {
+        Args: { fiche_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

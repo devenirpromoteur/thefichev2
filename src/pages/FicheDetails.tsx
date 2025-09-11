@@ -32,14 +32,17 @@ import { ProjectTab } from '@/components/synthese/ProjectTab';
 import ImageGallery from '@/components/images/ImageGallery';
 import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
 import { LandSummaryTable } from '@/components/residents/LandSummaryTable';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Fiche {
   id: string;
   address: string;
-  cadastreSection: string;
-  cadastreNumber: string;
+  cadastre_section: string;
+  cadastre_number: string;
   completion: number;
-  lastUpdated: string;
+  created_at: string;
+  updated_at: string;
   
   zone?: string;
   empriseAuSol?: number;
@@ -78,6 +81,7 @@ export default function FicheDetails() {
   const { ficheId } = useParams<{ ficheId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('cadastre');
   const [isEditing, setIsEditing] = useState(false);
   const [fiche, setFiche] = useState<Fiche | null>(null);
@@ -128,55 +132,59 @@ export default function FicheDetails() {
 
   useEffect(() => {
     const loadFiche = async () => {
+      if (!user || !ficheId) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        const storedFiches = localStorage.getItem('userFiches');
-        if (storedFiches) {
-          const fiches: Fiche[] = JSON.parse(storedFiches);
-          const foundFiche = fiches.find(f => f.id === ficheId);
-          
-          if (foundFiche) {
-            setFiche({
-              ...foundFiche,
-              zone: foundFiche.zone || 'UA',
-              empriseAuSol: foundFiche.empriseAuSol || 70,
-              hauteurMax: foundFiche.hauteurMax || 14,
-              espacesVerts: foundFiche.espacesVerts || 20,
-              stationnement: foundFiche.stationnement || 'À définir selon la règle',
-              
-              bandePrincipale: foundFiche.bandePrincipale || '',
-              bandeSecondaire: foundFiche.bandeSecondaire || '',
-              implantationVoies: foundFiche.implantationVoies || '',
-              implantationLimites: foundFiche.implantationLimites || '',
-              retraitLimites: foundFiche.retraitLimites || '',
-              implantationTerrain: foundFiche.implantationTerrain || '',
-              respirationBati: foundFiche.respirationBati || '',
-              
-              occupants: foundFiche.occupants || [
-                { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
-                { type: 'Locataires', nombre: 3, statut: 'Famille' }
-              ],
-              surfacePlancher: foundFiche.surfacePlancher || 1200,
-              logements: foundFiche.logements || 15,
-              logementsSociaux: foundFiche.logementsSociaux || 4,
-              logementsTypologies: foundFiche.logementsTypologies || {
-                t2: 5,
-                t3: 7,
-                t4: 3
-              }
-            });
+        const { data, error } = await supabase
+          .from('fiches')
+          .select('*')
+          .eq('id', ficheId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('Error fetching fiche:', error);
+          setFiche(null);
+          return;
+        }
+
+        if (data) {
+          setFiche({
+            ...data,
+            zone: 'UA',
+            empriseAuSol: 70,
+            hauteurMax: 14,
+            espacesVerts: 20,
+            stationnement: 'À définir selon la règle',
             
-            const fiches2 = JSON.parse(storedFiches);
-            const currentFiche = fiches2.find((f: any) => f.id === ficheId);
+            bandePrincipale: '',
+            bandeSecondaire: '',
+            implantationVoies: '',
+            implantationLimites: '',
+            retraitLimites: '',
+            implantationTerrain: '',
+            respirationBati: '',
             
-            if (currentFiche && currentFiche.cadastreEntries) {
-              setEntries(currentFiche.cadastreEntries);
-            } else {
-              handleAddEntry();
+            occupants: [
+              { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
+              { type: 'Locataires', nombre: 3, statut: 'Famille' }
+            ],
+            surfacePlancher: 1200,
+            logements: 15,
+            logementsSociaux: 4,
+            logementsTypologies: {
+              t2: 5,
+              t3: 7,
+              t4: 3
             }
-          }
+          });
+          
+          // Initialize entries with one default entry
+          handleAddEntry();
         }
       } catch (error) {
         console.error("Erreur lors du chargement de la fiche:", error);
@@ -191,14 +199,14 @@ export default function FicheDetails() {
     };
     
     loadFiche();
-  }, [ficheId, toast]);
+  }, [ficheId, user, toast]);
   
   const handleAddEntry = () => {
     const newEntry: CadastreEntry = {
       id: Math.random().toString(36).substring(2, 9),
-      parcelle: fiche?.cadastreNumber || '',
+      parcelle: fiche?.cadastre_number || '',
       adresse: fiche?.address || '',
-      section: fiche?.cadastreSection || '',
+      section: fiche?.cadastre_section || '',
       surface: '',
     };
     
@@ -368,8 +376,8 @@ export default function FicheDetails() {
     
     const fieldsToCheck = [
       fiche.address, 
-      fiche.cadastreSection, 
-      fiche.cadastreNumber,
+      fiche.cadastre_section, 
+      fiche.cadastre_number,
       fiche.zone,
       fiche.empriseAuSol,
       fiche.hauteurMax,
@@ -498,7 +506,7 @@ export default function FicheDetails() {
             <h1 className="text-3xl font-bold">{fiche.address.split(',')[0]}</h1>
             <p className="text-gray-600 mt-1">{fiche.address}</p>
             <p className="text-gray-500 text-sm mt-1">
-              Parcelle: {fiche.cadastreSection} {fiche.cadastreNumber}
+              Parcelle: {fiche.cadastre_section} {fiche.cadastre_number}
             </p>
           </div>
           

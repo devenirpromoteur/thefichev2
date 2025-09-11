@@ -4,9 +4,6 @@ import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -26,9 +23,6 @@ const Projets = () => {
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [projectName, setProjectName] = useState('');
-  const [projectDescription, setProjectDescription] = useState('');
   const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -78,11 +72,11 @@ const Projets = () => {
   };
 
   const createNewProject = async () => {
-    if (!user || !projectName.trim()) return;
+    if (!user) return;
 
     const newProject = {
-      name: projectName.trim(),
-      description: projectDescription.trim() || undefined,
+      name: `Nouveau projet ${new Date().toLocaleDateString('fr-FR')}`,
+      description: 'Description du projet...',
       owner_id: user.id,
     };
 
@@ -107,11 +101,6 @@ const Projets = () => {
         title: "Projet créé",
         description: "Votre nouveau projet a été créé avec succès",
       });
-
-      // Reset form and close dialog
-      setProjectName('');
-      setProjectDescription('');
-      setIsDialogOpen(false);
 
       // Navigate to the new project
       navigate(`/fiche/${data.id}`);
@@ -172,50 +161,10 @@ const Projets = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="flex items-center space-x-2">
-                <Plus className="h-4 w-4" />
-                <span>Nouveau projet</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Créer un nouveau projet</DialogTitle>
-                <DialogDescription>
-                  Saisissez les informations de votre nouveau projet d'analyse de faisabilité.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="project-name">Nom du projet</Label>
-                  <Input
-                    id="project-name"
-                    placeholder="Ex: Projet résidentiel Quartier Nord"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="project-description">Description (optionnelle)</Label>
-                  <Textarea
-                    id="project-description"
-                    placeholder="Description du projet..."
-                    value={projectDescription}
-                    onChange={(e) => setProjectDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Annuler
-                </Button>
-                <Button onClick={createNewProject} disabled={!projectName.trim()}>
-                  Créer le projet
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={createNewProject} className="flex items-center space-x-2">
+            <Plus className="h-4 w-4" />
+            <span>Nouveau projet</span>
+          </Button>
         </div>
 
         {filteredProjects.length === 0 ? (
@@ -227,50 +176,10 @@ const Projets = () => {
                 <p className="text-muted-foreground mb-6">
                   Créez votre premier projet pour commencer votre analyse de faisabilité
                 </p>
-                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="flex items-center space-x-2 mx-auto">
-                      <Plus className="h-4 w-4" />
-                      <span>Créer mon premier projet</span>
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Créer un nouveau projet</DialogTitle>
-                      <DialogDescription>
-                        Saisissez les informations de votre nouveau projet d'analyse de faisabilité.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="project-name-empty">Nom du projet</Label>
-                        <Input
-                          id="project-name-empty"
-                          placeholder="Ex: Projet résidentiel Quartier Nord"
-                          value={projectName}
-                          onChange={(e) => setProjectName(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="project-description-empty">Description (optionnelle)</Label>
-                        <Textarea
-                          id="project-description-empty"
-                          placeholder="Description du projet..."
-                          value={projectDescription}
-                          onChange={(e) => setProjectDescription(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                        Annuler
-                      </Button>
-                      <Button onClick={createNewProject} disabled={!projectName.trim()}>
-                        Créer le projet
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                <Button onClick={createNewProject} className="flex items-center space-x-2 mx-auto">
+                  <Plus className="h-4 w-4" />
+                  <span>Créer mon premier projet</span>
+                </Button>
               </>
             ) : (
               <>

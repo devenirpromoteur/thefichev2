@@ -251,7 +251,7 @@ export type Database = {
           resident_status: string
           section: string | null
           updated_at: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           additional_info?: string
@@ -266,7 +266,7 @@ export type Database = {
           resident_status?: string
           section?: string | null
           updated_at?: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           additional_info?: string
@@ -281,7 +281,7 @@ export type Database = {
           resident_status?: string
           section?: string | null
           updated_at?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }

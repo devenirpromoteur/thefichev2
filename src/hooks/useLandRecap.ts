@@ -14,6 +14,7 @@ export type LandRecapEntry = {
   additionalInfo: string;
   residentStatus: string;
   cadastreId: string;
+  userId?: string;
 };
 
 interface UseLandRecapProps {
@@ -27,102 +28,82 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<LandRecapEntry | null>(null);
 
-  // Load entries from database and localStorage fallback
+  // Load entries from Supabase with localStorage fallback
   const loadEntries = async () => {
     if (!ficheId || !user) return;
 
     setIsLoading(true);
     
     try {
-      // First try to load from database
-      const { data: dbEntries, error } = await supabase
+      // Try to load from Supabase first
+      const { data: supabaseEntries, error } = await supabase
         .from('recapitulatif_foncier_rows')
         .select('*')
         .eq('fiche_id', ficheId)
         .eq('user_id', user.id);
 
-      if (error) throw error;
-
-      // If no database entries, try localStorage for migration
-      if (!dbEntries || dbEntries.length === 0) {
+      if (error) {
+        console.error('Error loading from Supabase:', error);
+        // Fallback to localStorage
         const storedData = localStorage.getItem(`landSummary_${ficheId}`);
-        if (storedData) {
-          const localEntries = JSON.parse(storedData);
-          // Migrate localStorage data to database
-          for (const entry of localEntries) {
-            const { error: insertError } = await supabase
-              .from('recapitulatif_foncier_rows')
-              .insert({
-                user_id: user.id,
-                fiche_id: ficheId,
-                section: entry.section || '',
-                parcelle: entry.parcelle || '',
-                occupation_type: entry.occupationType,
-                owner_status: entry.ownerStatus,
-                owner_details: entry.ownerDetails,
-                additional_info: entry.additionalInfo,
-                resident_status: entry.residentStatus,
-                cadastre_id: entry.cadastreId || '',
-              });
-            
-            if (insertError) {
-              console.error('Migration error:', insertError);
-            }
-          }
-          
-          // Reload from database after migration
-          const { data: migratedEntries } = await supabase
-            .from('recapitulatif_foncier_rows')
-            .select('*')
-            .eq('fiche_id', ficheId)
-            .eq('user_id', user.id);
-          
-          setEntries(migratedEntries?.map(mapDbEntryToLocal) || []);
-          
-          // Clean up localStorage after successful migration
-          localStorage.removeItem(`landSummary_${ficheId}`);
-        } else {
-          setEntries([]);
-        }
+        const localEntries: LandRecapEntry[] = storedData 
+          ? JSON.parse(storedData).map((entry: any) => ({
+              id: entry.id,
+              ficheId: ficheId,
+              section: entry.section || '',
+              parcelle: entry.parcelle || '',
+              occupationType: entry.occupationType,
+              ownerStatus: entry.ownerStatus,
+              ownerDetails: entry.ownerDetails,
+              additionalInfo: entry.additionalInfo,
+              residentStatus: entry.residentStatus,
+              cadastreId: entry.cadastreId || '',
+            }))
+          : [];
+        setEntries(localEntries);
       } else {
-        setEntries(dbEntries.map(mapDbEntryToLocal));
+        // Map Supabase data to our format
+        const mappedEntries: LandRecapEntry[] = supabaseEntries.map((entry: any) => ({
+          id: entry.id,
+          ficheId: entry.fiche_id,
+          section: entry.section || '',
+          parcelle: entry.parcelle || '',
+          occupationType: entry.occupation_type,
+          ownerStatus: entry.owner_status,
+          ownerDetails: entry.owner_details || '',
+          additionalInfo: entry.additional_info || '',
+          residentStatus: entry.resident_status,
+          cadastreId: entry.cadastre_id || '',
+          userId: entry.user_id,
+        }));
+        setEntries(mappedEntries);
       }
     } catch (error) {
-      console.error('Error loading entries:', error);
-      toast({
-        title: "Erreur de chargement",
-        description: "Impossible de charger les données",
-        variant: "destructive",
-      });
-      setEntries([]);
+      console.error('Error in loadEntries:', error);
+      // Fallback to localStorage
+      const storedData = localStorage.getItem(`landSummary_${ficheId}`);
+      const localEntries: LandRecapEntry[] = storedData ? JSON.parse(storedData) : [];
+      setEntries(localEntries);
     }
     
     setIsLoading(false);
   };
 
-  // Helper function to map database entry to local format
-  const mapDbEntryToLocal = (dbEntry: any): LandRecapEntry => ({
-    id: dbEntry.id,
-    ficheId: dbEntry.fiche_id,
-    section: dbEntry.section || '',
-    parcelle: dbEntry.parcelle || '',
-    occupationType: dbEntry.occupation_type,
-    ownerStatus: dbEntry.owner_status,
-    ownerDetails: dbEntry.owner_details || '',
-    additionalInfo: dbEntry.additional_info || '',
-    residentStatus: dbEntry.resident_status,
-    cadastreId: dbEntry.cadastre_id || '',
-  });
-
   // Add new entry
   const addEntry = async (entry: Omit<LandRecapEntry, 'id'>) => {
-    if (!user) return null;
+    if (!user) {
+      toast({
+        title: "Erreur",
+        description: "Vous devez être connecté pour ajouter une entrée",
+      });
+      return null;
+    }
 
     try {
+      // Save to Supabase
       const { data, error } = await supabase
         .from('recapitulatif_foncier_rows')
         .insert({
-          user_id: user.id,
           fiche_id: entry.ficheId,
           section: entry.section,
           parcelle: entry.parcelle,
@@ -132,14 +113,43 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
           additional_info: entry.additionalInfo,
           resident_status: entry.residentStatus,
           cadastre_id: entry.cadastreId,
+          user_id: user.id,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error saving to Supabase:', error);
+        // Fallback: save to localStorage and create local entry
+        const tempId = Date.now().toString() + Math.random().toString(36).substring(2, 9);
+        const newEntry: LandRecapEntry = { id: tempId, ...entry };
+        const updatedEntries = [...entries, newEntry];
+        setEntries(updatedEntries);
+        localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(updatedEntries));
+        
+        toast({
+          title: "Ligne ajoutée (hors ligne)",
+          description: "La ligne a été sauvegardée localement",
+        });
+        return newEntry;
+      }
 
-      const newEntry = mapDbEntryToLocal(data);
-      setEntries(prev => [...prev, newEntry]);
+      // Map Supabase response back to our format
+      const newEntry: LandRecapEntry = {
+        id: data.id,
+        ficheId: data.fiche_id,
+        section: data.section,
+        parcelle: data.parcelle,
+        occupationType: data.occupation_type,
+        ownerStatus: data.owner_status,
+        ownerDetails: data.owner_details,
+        additionalInfo: data.additional_info,
+        residentStatus: data.resident_status,
+        cadastreId: data.cadastre_id,
+        userId: data.user_id,
+      };
+
+      setEntries([...entries, newEntry]);
       
       toast({
         title: "Ligne ajoutée",
@@ -148,11 +158,10 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
       
       return newEntry;
     } catch (error) {
-      console.error('Error adding entry:', error);
+      console.error('Error in addEntry:', error);
       toast({
         title: "Erreur",
         description: "Impossible d'ajouter la ligne",
-        variant: "destructive",
       });
       return null;
     }
@@ -160,56 +169,78 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
 
   // Update entry
   const updateEntry = async (id: string, updates: Partial<LandRecapEntry>) => {
+    if (!user) return false;
+
     try {
-      // Prepare database updates by mapping field names
-      const dbUpdates: any = {};
-      if (updates.section !== undefined) dbUpdates.section = updates.section;
-      if (updates.parcelle !== undefined) dbUpdates.parcelle = updates.parcelle;
-      if (updates.occupationType !== undefined) dbUpdates.occupation_type = updates.occupationType;
-      if (updates.ownerStatus !== undefined) dbUpdates.owner_status = updates.ownerStatus;
-      if (updates.ownerDetails !== undefined) dbUpdates.owner_details = updates.ownerDetails;
-      if (updates.additionalInfo !== undefined) dbUpdates.additional_info = updates.additionalInfo;
-      if (updates.residentStatus !== undefined) dbUpdates.resident_status = updates.residentStatus;
-      if (updates.cadastreId !== undefined) dbUpdates.cadastre_id = updates.cadastreId;
+      // Update optimistically
+      const updatedEntries = entries.map(entry => 
+        entry.id === id ? { ...entry, ...updates } : entry
+      );
+      setEntries(updatedEntries);
+
+      // Try to save to Supabase
+      const updateData: any = {};
+      if (updates.section !== undefined) updateData.section = updates.section;
+      if (updates.parcelle !== undefined) updateData.parcelle = updates.parcelle;
+      if (updates.occupationType !== undefined) updateData.occupation_type = updates.occupationType;
+      if (updates.ownerStatus !== undefined) updateData.owner_status = updates.ownerStatus;
+      if (updates.ownerDetails !== undefined) updateData.owner_details = updates.ownerDetails;
+      if (updates.additionalInfo !== undefined) updateData.additional_info = updates.additionalInfo;
+      if (updates.residentStatus !== undefined) updateData.resident_status = updates.residentStatus;
+      if (updates.cadastreId !== undefined) updateData.cadastre_id = updates.cadastreId;
 
       const { error } = await supabase
         .from('recapitulatif_foncier_rows')
-        .update(dbUpdates)
+        .update(updateData)
         .eq('id', id)
-        .eq('user_id', user?.id);
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating in Supabase:', error);
+        // Still save to localStorage as fallback
+        localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(updatedEntries));
+      }
 
-      // Update local state
-      setEntries(prev => prev.map(entry => 
-        entry.id === id ? { ...entry, ...updates } : entry
-      ));
-      
       return true;
     } catch (error) {
-      console.error('Error updating entry:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de mettre à jour la ligne",
-        variant: "destructive",
-      });
+      console.error('Error in updateEntry:', error);
       return false;
     }
   };
 
   // Delete entry
   const deleteEntry = async (id: string) => {
+    if (!user) {
+      toast({
+        title: "Erreur",
+        description: "Vous devez être connecté pour supprimer une entrée",
+      });
+      return false;
+    }
+
     try {
+      // Delete from Supabase
       const { error } = await supabase
         .from('recapitulatif_foncier_rows')
         .delete()
         .eq('id', id)
-        .eq('user_id', user?.id);
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error deleting from Supabase:', error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de supprimer la ligne",
+        });
+        return false;
+      }
 
       // Update local state
-      setEntries(prev => prev.filter(entry => entry.id !== id));
+      const updatedEntries = entries.filter(entry => entry.id !== id);
+      setEntries(updatedEntries);
+      
+      // Also remove from localStorage
+      localStorage.setItem(`landSummary_${ficheId}`, JSON.stringify(updatedEntries));
       
       toast({
         title: "Ligne supprimée",
@@ -218,11 +249,10 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
       
       return true;
     } catch (error) {
-      console.error('Error deleting entry:', error);
+      console.error('Error in deleteEntry:', error);
       toast({
         title: "Erreur",
         description: "Impossible de supprimer la ligne",
-        variant: "destructive",
       });
       return false;
     }
@@ -244,7 +274,7 @@ export const useLandRecap = ({ ficheId }: UseLandRecapProps) => {
     setDeleteTarget(null);
   };
 
-  // Load entries on mount and when user changes
+  // Load entries on mount
   useEffect(() => {
     loadEntries();
   }, [ficheId, user]);

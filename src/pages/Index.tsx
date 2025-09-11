@@ -6,6 +6,7 @@ import { ArrowRight, BarChart2, FileText, Image, Map, Users } from 'lucide-react
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserFicheList } from '@/components/fiches/UserFicheList';
+import { useAuth } from '@/contexts/AuthContext';
 
 const features = [
   {
@@ -49,6 +50,7 @@ const features = [
 const Index = () => {
   const heroRef = useRef<HTMLDivElement>(null);
   const featureRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const { user } = useAuth();
   
   const [showFeatures, setShowFeatures] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -132,7 +134,7 @@ const Index = () => {
       </section>
       
       
-      {isLoggedIn && (
+      {user && (
         <section className="py-16 bg-gray-50 rounded-3xl mb-12 opacity-0 animate-enter">
           <div className="text-center mb-10">
             <h2 className="text-3xl font-bold mb-4">Mes Fiches Parcelles</h2>

@@ -106,6 +106,39 @@ export type Database = {
           },
         ]
       }
+      fiches: {
+        Row: {
+          address: string
+          cadastre_number: string
+          cadastre_section: string
+          completion: number
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address: string
+          cadastre_number: string
+          cadastre_section: string
+          completion?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          cadastre_number?: string
+          cadastre_section?: string
+          completion?: number
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       land_recaps: {
         Row: {
           created_at: string

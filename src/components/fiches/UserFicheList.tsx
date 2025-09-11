@@ -8,47 +8,24 @@ import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Type definition for a fiche
 interface Fiche {
   id: string;
   address: string;
-  cadastreSection: string;
-  cadastreNumber: string;
+  cadastre_section: string;
+  cadastre_number: string;
   completion: number;
-  lastUpdated: string;
+  created_at: string;
+  updated_at: string;
 }
 
-// Mock data - À remplacer par les données réelles de Supabase
-const mockFiches: Fiche[] = [
-  {
-    id: '1',
-    address: '15 rue de la Paix, 75001 Paris',
-    cadastreSection: 'AB',
-    cadastreNumber: '123',
-    completion: 75,
-    lastUpdated: '2023-10-15'
-  },
-  {
-    id: '2',
-    address: '8 avenue des Champs-Élysées, 75008 Paris',
-    cadastreSection: 'CD',
-    cadastreNumber: '456',
-    completion: 30,
-    lastUpdated: '2023-10-12'
-  },
-  {
-    id: '3',
-    address: '25 boulevard Haussmann, 75009 Paris',
-    cadastreSection: 'EF',
-    cadastreNumber: '789',
-    completion: 100,
-    lastUpdated: '2023-10-10'
-  }
-];
 
 export function UserFicheList() {
   const [fiches, setFiches] = useState<Fiche[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newFiche, setNewFiche] = useState({
     address: '',
@@ -57,24 +34,33 @@ export function UserFicheList() {
   });
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
   
-  // Simuler le chargement des fiches depuis Supabase
+  // Charger les fiches depuis Supabase
   useEffect(() => {
-    // Dans une implémentation réelle, récupérer les fiches depuis Supabase
     const loadFiches = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Simuler un délai de chargement
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Récupérer les fiches stockées localement ou utiliser les mockFiches
-        const storedFiches = localStorage.getItem('userFiches');
-        if (storedFiches) {
-          setFiches(JSON.parse(storedFiches));
-        } else {
-          setFiches(mockFiches);
-          // Sauvegarder les fiches par défaut dans localStorage
-          localStorage.setItem('userFiches', JSON.stringify(mockFiches));
+        const { data, error } = await supabase
+          .from('fiches')
+          .select('*')
+          .order('updated_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching fiches:', error);
+          toast({
+            title: "Erreur de chargement",
+            description: "Impossible de charger vos fiches parcelles",
+            variant: "destructive",
+          });
+          return;
         }
+
+        setFiches(data || []);
       } catch (error) {
         console.error("Erreur lors du chargement des fiches:", error);
         toast({
@@ -82,11 +68,13 @@ export function UserFicheList() {
           description: "Impossible de charger vos fiches parcelles",
           variant: "destructive",
         });
+      } finally {
+        setLoading(false);
       }
     };
     
     loadFiches();
-  }, [toast]);
+  }, [user, toast]);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -97,7 +85,16 @@ export function UserFicheList() {
     setIsDialogOpen(true);
   };
   
-  const handleSubmitFiche = () => {
+  const handleSubmitFiche = async () => {
+    if (!user) {
+      toast({
+        title: "Erreur d'authentification",
+        description: "Vous devez être connecté pour créer une fiche",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Vérifier que tous les champs sont remplis
     if (!newFiche.address || !newFiche.cadastreSection || !newFiche.cadastreNumber) {
       toast({
@@ -108,40 +105,55 @@ export function UserFicheList() {
       return;
     }
     
-    // Créer la nouvelle fiche
-    const newId = Date.now().toString();
-    const createdFiche: Fiche = {
-      id: newId,
-      address: newFiche.address,
-      cadastreSection: newFiche.cadastreSection,
-      cadastreNumber: newFiche.cadastreNumber,
-      completion: 10, // valeur initiale
-      lastUpdated: new Date().toISOString().split('T')[0]
-    };
-    
-    // Ajouter la fiche à la liste
-    const updatedFiches = [...fiches, createdFiche];
-    setFiches(updatedFiches);
-    
-    // Dans une implémentation réelle, sauvegarder dans Supabase
-    // Pour l'instant, sauvegarder dans localStorage
-    localStorage.setItem('userFiches', JSON.stringify(updatedFiches));
-    
-    // Réinitialiser le formulaire et fermer la boîte de dialogue
-    setNewFiche({
-      address: '',
-      cadastreSection: '',
-      cadastreNumber: ''
-    });
-    setIsDialogOpen(false);
-    
-    toast({
-      title: "Fiche créée avec succès",
-      description: "La fiche a été ajoutée à votre liste",
-    });
-    
-    // Naviguer vers la nouvelle fiche
-    navigate(`/fiche/${newId}`);
+    try {
+      // Créer la nouvelle fiche dans Supabase
+      const { data, error } = await supabase
+        .from('fiches')
+        .insert([{
+          user_id: user.id,
+          address: newFiche.address,
+          cadastre_section: newFiche.cadastreSection,
+          cadastre_number: newFiche.cadastreNumber
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating fiche:', error);
+        toast({
+          title: "Erreur de création",
+          description: "Impossible de créer la fiche",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Ajouter la fiche à la liste locale
+      setFiches(prev => [data, ...prev]);
+      
+      // Réinitialiser le formulaire et fermer la boîte de dialogue
+      setNewFiche({
+        address: '',
+        cadastreSection: '',
+        cadastreNumber: ''
+      });
+      setIsDialogOpen(false);
+      
+      toast({
+        title: "Fiche créée avec succès",
+        description: "La fiche a été ajoutée à votre liste",
+      });
+      
+      // Naviguer vers la nouvelle fiche
+      navigate(`/fiche/${data.id}`);
+    } catch (error) {
+      console.error('Error creating fiche:', error);
+      toast({
+        title: "Erreur de création",
+        description: "Impossible de créer la fiche",
+        variant: "destructive",
+      });
+    }
   };
   
   // Fonction pour naviguer directement vers la fiche sélectionnée
@@ -149,6 +161,23 @@ export function UserFicheList() {
     navigate(`/fiche/${id}`);
   };
   
+  
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Chargement de vos fiches...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">Veuillez vous connecter pour voir vos fiches.</p>
+      </div>
+    );
+  }
+
   if (fiches.length === 0) {
     return (
       <div className="text-center py-8">
@@ -241,10 +270,10 @@ export function UserFicheList() {
               </div>
               <div className="flex gap-2 text-sm text-gray-500">
                 <span className="font-medium">Parcelle:</span>
-                <span>{fiche.cadastreSection} {fiche.cadastreNumber}</span>
+                <span>{fiche.cadastre_section} {fiche.cadastre_number}</span>
               </div>
               <div className="mt-2 text-sm text-gray-400">
-                Dernière modification: {new Date(fiche.lastUpdated).toLocaleDateString('fr-FR', {
+                Dernière modification: {new Date(fiche.updated_at).toLocaleDateString('fr-FR', {
                   year: 'numeric', month: 'long', day: 'numeric'
                 })}
               </div>

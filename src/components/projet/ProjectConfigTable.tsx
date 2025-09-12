@@ -503,13 +503,14 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
               {/* Ligne conditionnelle pour les autres types de projets */}
               {buildings.some(building => 
                 building.name && 
-                !['Logements', ''].includes(building.name)
+                building.name !== 'Logements' && 
+                building.name !== ''
               ) && (
                 <TableRow>
                   <TableCell className="font-medium">
                     <div className="flex flex-col">
                       <span>Surface moyenne par</span>
-                      <span>{buildings.find(b => b.name && !['Logements', ''].includes(b.name))?.name?.toLowerCase() || 'autres'}</span>
+                      <span>{buildings.find(b => b.name && b.name !== 'Logements' && b.name !== '')?.name?.toLowerCase() || 'autres'}</span>
                     </div>
                   </TableCell>
                   <TableCell colSpan={2}>

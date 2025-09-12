@@ -172,7 +172,12 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     setBuildings(prev => 
       prev.map(building => 
         building.id === id 
-          ? { ...building, [field]: typeof value === 'string' ? parseFloat(value) || 0 : value } 
+          ? { 
+              ...building, 
+              [field]: field === 'name' 
+                ? value 
+                : (typeof value === 'string' ? parseFloat(value) || 0 : value)
+            } 
           : building
       )
     );

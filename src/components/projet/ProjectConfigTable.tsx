@@ -83,8 +83,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     avgSurfacePerUnitSocial: 60,
     totalUnitsLibre: 0,
     totalUnitsSocial: 0,
-    internalParkingRatio: 1.5,
-    externalParkingRatio: 0,
+    internalParkingRatioLibre: 1.5,
+    internalParkingRatioSocial: 1.5,
+    externalParkingRatioLibre: 0,
+    externalParkingRatioSocial: 0,
     internalParkingLibre: 0,
     internalParkingSocial: 0,
     externalParkingLibre: 0,
@@ -132,10 +134,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     const totalUnitsSocial = Math.round(shabSocial / totals.avgSurfacePerUnitSocial);
     
     // Calculate parking spots - separately for Libre and Social
-    const internalParkingLibre = Math.round(totalUnitsLibre * totals.internalParkingRatio);
-    const internalParkingSocial = Math.round(totalUnitsSocial * totals.internalParkingRatio);
-    const externalParkingLibre = Math.round(totalUnitsLibre * totals.externalParkingRatio);
-    const externalParkingSocial = Math.round(totalUnitsSocial * totals.externalParkingRatio);
+    const internalParkingLibre = Math.round(totalUnitsLibre * totals.internalParkingRatioLibre);
+    const internalParkingSocial = Math.round(totalUnitsSocial * totals.internalParkingRatioSocial);
+    const externalParkingLibre = Math.round(totalUnitsLibre * totals.externalParkingRatioLibre);
+    const externalParkingSocial = Math.round(totalUnitsSocial * totals.externalParkingRatioSocial);
 
     setTotals(prev => ({
       ...prev,
@@ -162,8 +164,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     totals.shabCoefficientSocial, 
     totals.avgSurfacePerUnitLibre,
     totals.avgSurfacePerUnitSocial,
-    totals.internalParkingRatio,
-    totals.externalParkingRatio
+    totals.internalParkingRatioLibre,
+    totals.internalParkingRatioSocial,
+    totals.externalParkingRatioLibre,
+    totals.externalParkingRatioSocial
   ]);
 
   // Handle changes to building properties
@@ -510,10 +514,29 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     <span>intérieures par logt</span>
                   </div>
                 </TableCell>
-                <TableCell colSpan={2}>
+                <TableCell>
                   <Select 
-                    value={totals.internalParkingRatio.toString()} 
-                    onValueChange={value => handleTotalChange('internalParkingRatio', parseFloat(value))}
+                    value={totals.internalParkingRatioLibre.toString()} 
+                    onValueChange={value => handleTotalChange('internalParkingRatioLibre', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.5">0.5</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="1.5">1.5</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="2.5">2.5</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <Select 
+                    value={totals.internalParkingRatioSocial.toString()} 
+                    onValueChange={value => handleTotalChange('internalParkingRatioSocial', parseFloat(value))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -537,10 +560,29 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     <span>extérieures par logt</span>
                   </div>
                 </TableCell>
-                <TableCell colSpan={2}>
+                <TableCell>
                   <Select 
-                    value={totals.externalParkingRatio.toString()} 
-                    onValueChange={value => handleTotalChange('externalParkingRatio', parseFloat(value))}
+                    value={totals.externalParkingRatioLibre.toString()} 
+                    onValueChange={value => handleTotalChange('externalParkingRatioLibre', parseFloat(value))}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.5">0.5</SelectItem>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="1.5">1.5</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="2.5">2.5</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
+                  <Select 
+                    value={totals.externalParkingRatioSocial.toString()} 
+                    onValueChange={value => handleTotalChange('externalParkingRatioSocial', parseFloat(value))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />

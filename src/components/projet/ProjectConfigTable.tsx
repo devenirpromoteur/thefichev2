@@ -100,7 +100,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
 
   // Recalculate all values when buildings change
   useEffect(() => {
-    // Calculate SDP for each building
+    // Calculate SDP for each building and totals
     const updatedBuildings = buildings.map(building => {
       const calculatedSdp = calculateSdp(
         building.footprint, 
@@ -117,8 +117,6 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
         socialSdp: parseFloat(calculatedSocialSdp.toFixed(2))
       };
     });
-
-    setBuildings(updatedBuildings);
 
     // Calculate totals
     const totalSdp = updatedBuildings.reduce((sum, building) => sum + building.sdp, 0);
@@ -158,7 +156,8 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
       onDataChange(updatedBuildings);
     }
   }, [
-    buildings, 
+    // Only depend on the values that should trigger recalculation, not the entire buildings array
+    JSON.stringify(buildings.map(b => ({ id: b.id, footprint: b.footprint, levels: b.levels, atticCoefficient: b.atticCoefficient, sdpCoefficient: b.sdpCoefficient, socialPercentage: b.socialPercentage }))),
     totals.shabCoefficientLibre, 
     totals.shabCoefficientSocial, 
     totals.avgSurfacePerUnitLibre,
@@ -170,16 +169,33 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
   // Handle changes to building properties
   const handleBuildingChange = (id: string, field: keyof BuildingEntry, value: any) => {
     setBuildings(prev => 
-      prev.map(building => 
-        building.id === id 
-          ? { 
-              ...building, 
-              [field]: field === 'name' 
-                ? value 
-                : (typeof value === 'string' ? parseFloat(value) || 0 : value)
-            } 
-          : building
-      )
+      prev.map(building => {
+        if (building.id === id) {
+          const updatedBuilding = {
+            ...building, 
+            [field]: field === 'name' 
+              ? value 
+              : (typeof value === 'string' ? parseFloat(value) || 0 : value)
+          };
+          
+          // Recalculate SDP immediately for this building
+          if (field !== 'name') {
+            const calculatedSdp = calculateSdp(
+              updatedBuilding.footprint, 
+              updatedBuilding.levels, 
+              updatedBuilding.atticCoefficient, 
+              updatedBuilding.sdpCoefficient
+            );
+            const calculatedSocialSdp = calculatedSdp * (updatedBuilding.socialPercentage / 100);
+            
+            updatedBuilding.sdp = parseFloat(calculatedSdp.toFixed(2));
+            updatedBuilding.socialSdp = parseFloat(calculatedSocialSdp.toFixed(2));
+          }
+          
+          return updatedBuilding;
+        }
+        return building;
+      })
     );
   };
 

@@ -312,8 +312,16 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="0">0</SelectItem>
+                      <SelectItem value="0.15">0.15</SelectItem>
+                      <SelectItem value="0.25">0.25</SelectItem>
+                      <SelectItem value="0.35">0.35</SelectItem>
                       <SelectItem value="0.45">0.45</SelectItem>
+                      <SelectItem value="0.55">0.55</SelectItem>
+                      <SelectItem value="0.65">0.65</SelectItem>
+                      <SelectItem value="0.75">0.75</SelectItem>
                       <SelectItem value="0.85">0.85</SelectItem>
+                      <SelectItem value="0.95">0.95</SelectItem>
+                      <SelectItem value="1">1.00</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>

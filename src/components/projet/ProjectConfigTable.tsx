@@ -81,6 +81,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     shabSocial: 0,
     avgSurfacePerUnitLibre: 60,
     avgSurfacePerUnitSocial: 60,
+    avgSurfacePerUnitOther: 100, // Pour commerces, bureaux, logistique, etc.
     totalUnitsLibre: 0,
     totalUnitsSocial: 0,
     internalParkingRatioLibre: 1.5,
@@ -164,6 +165,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     totals.shabCoefficientSocial, 
     totals.avgSurfacePerUnitLibre,
     totals.avgSurfacePerUnitSocial,
+    totals.avgSurfacePerUnitOther,
     totals.internalParkingRatioLibre,
     totals.internalParkingRatioSocial,
     totals.externalParkingRatioLibre,
@@ -498,6 +500,37 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                   </Select>
                 </TableCell>
               </TableRow>
+              {/* Ligne conditionnelle pour les autres types de projets */}
+              {buildings.some(building => 
+                building.name && 
+                !['Logements', ''].includes(building.name)
+              ) && (
+                <TableRow>
+                  <TableCell className="font-medium">
+                    <div className="flex flex-col">
+                      <span>Surface moyenne par</span>
+                      <span>{buildings.find(b => b.name && !['Logements', ''].includes(b.name))?.name?.toLowerCase() || 'autres'}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell colSpan={2}>
+                    <Select 
+                      value={totals.avgSurfacePerUnitOther.toString()} 
+                      onValueChange={value => handleTotalChange('avgSurfacePerUnitOther', parseFloat(value))}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[200px] overflow-y-auto">
+                        {Array.from({ length: 39 }, (_, i) => (i + 2) * 10).map((size) => (
+                          <SelectItem key={size} value={size.toString()}>
+                            {size} m²
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
+                </TableRow>
+              )}
               <TableRow>
                 <TableCell className="font-medium">Logements</TableCell>
                 <TableCell className="text-center font-medium">

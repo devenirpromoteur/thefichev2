@@ -24,6 +24,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { AerialPhoto } from '@/components/synthese/AerialPhoto';
 import { ProjectSummary } from '@/components/synthese/ProjectSummary';
+import { ProjectSummaryNew, type Projet } from '@/components/synthese/ProjectSummaryNew';
 import { HousingDistribution } from '@/components/synthese/HousingDistribution';
 import { ParkingSection } from '@/components/synthese/ParkingSection';
 import { CadastreTab } from '@/components/synthese/CadastreTab';
@@ -870,6 +871,24 @@ export default function FicheDetails() {
                 showImage={showImage} 
                 setShowImage={setShowImage}
                 ficheId={ficheId}
+              />
+              
+              <ProjectSummaryNew 
+                projet={{
+                  surface_fonciere_m2: getTotalSurface(),
+                  cos_pct: projectSummary.cos * 100,
+                  capacite_constructible_m2: projectSummary.capaciteConstructive,
+                  hauteur_moyenne_m: projectSummary.hauteur,
+                  nb_etages_libelle: `R+${projectSummary.etages - 1}`,
+                  capacite_logements_collectifs_m2: projectSummary.capaciteLogements,
+                  logements_libres_m2: projectSummary.logementsLibres * 50, // Approximation surface par logement libre
+                  part_sociale_pct: (projectSummary.logementsSociaux / (projectSummary.logementsLibres + projectSummary.logementsSociaux)) * 100,
+                  logements_sociaux_m2: projectSummary.logementsSociaux * 45, // Approximation surface par logement social
+                  nb_lots_estime: projectSummary.logementsLibres + projectSummary.logementsSociaux,
+                  parkings_requis: projectSummary.stationnementRequis,
+                  espaces_verts_pct: (projectSummary.surfaceEspacesVerts / getTotalSurface()) * 100,
+                  espaces_verts_m2: projectSummary.surfaceEspacesVerts
+                } as Projet}
               />
               
               <ProjectSummary 

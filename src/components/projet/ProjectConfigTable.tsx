@@ -247,11 +247,23 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
             {buildings.map((building) => (
               <TableRow key={building.id}>
                 <TableCell>
-                  <Input 
+                  <Select 
                     value={building.name}
-                    onChange={e => handleBuildingChange(building.id, 'name', e.target.value)}
-                    className="text-center"
-                  />
+                    onValueChange={value => handleBuildingChange(building.id, 'name', value)}
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="Sélectionner un type de projet" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border shadow-lg z-50">
+                      <SelectItem value="Logements">Logements</SelectItem>
+                      <SelectItem value="Bureaux">Bureaux</SelectItem>
+                      <SelectItem value="Logistique">Logistique</SelectItem>
+                      <SelectItem value="Étudiants/Seniors">Étudiants/Seniors</SelectItem>
+                      <SelectItem value="Réhabilitation">Réhabilitation</SelectItem>
+                      <SelectItem value="Commerces">Commerces</SelectItem>
+                      <SelectItem value="Mixte">Mixte</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </TableCell>
                 <TableCell>
                   <Input 

@@ -891,15 +891,7 @@ export default function FicheDetails() {
                 } as Projet}
               />
               
-              <ProjectSummary 
-                projectSummary={projectSummary}
-                handleSummaryChange={handleSummaryChange}
-                isEditing={isEditing}
-                visibleSections={{ projet: visibleSections.projet }}
-                toggleSection={() => toggleSection('projet')}
-              />
-              
-              <HousingDistribution 
+              <HousingDistribution
                 projectSummary={projectSummary}
                 handleSummaryChange={handleSummaryChange}
                 isEditing={isEditing}

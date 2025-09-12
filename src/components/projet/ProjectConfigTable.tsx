@@ -260,13 +260,18 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                       <SelectValue placeholder="Sélectionner un type de projet" />
                     </SelectTrigger>
                     <SelectContent className="bg-background border shadow-lg z-50">
-                      <SelectItem value="Logements">Logements</SelectItem>
-                      <SelectItem value="Bureaux">Bureaux</SelectItem>
-                      <SelectItem value="Logistique">Logistique</SelectItem>
-                      <SelectItem value="Étudiants/Seniors">Étudiants/Seniors</SelectItem>
-                      <SelectItem value="Réhabilitation">Réhabilitation</SelectItem>
-                      <SelectItem value="Commerces">Commerces</SelectItem>
-                      <SelectItem value="Mixte">Mixte</SelectItem>
+                      {['Logements', 'Bureaux', 'Logistique', 'Étudiants/Seniors', 'Réhabilitation', 'Commerces', 'Mixte']
+                        .filter(projectType => 
+                          // Permettre le type actuel ou les types non utilisés par d'autres lignes
+                          projectType === building.name || 
+                          !buildings.some(b => b.id !== building.id && b.name === projectType)
+                        )
+                        .map(projectType => (
+                          <SelectItem key={projectType} value={projectType}>
+                            {projectType}
+                          </SelectItem>
+                        ))
+                      }
                     </SelectContent>
                   </Select>
                 </TableCell>

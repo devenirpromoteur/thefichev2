@@ -48,15 +48,15 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
             
-            {/* Protected routes */}
-            <Route path="/projets" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-            <Route path="/cadastre" element={<ProtectedRoute><Cadastre /></ProtectedRoute>} />
-            <Route path="/plu" element={<ProtectedRoute><PLU /></ProtectedRoute>} />
-            <Route path="/residents" element={<ProtectedRoute><Residents /></ProtectedRoute>} />
-            <Route path="/projet" element={<ProtectedRoute><Projet /></ProtectedRoute>} />
-            <Route path="/fiche/:ficheId" element={<ProtectedRoute><FicheDetails /></ProtectedRoute>} />
-            <Route path="/synthese" element={<ProtectedRoute><Synthese /></ProtectedRoute>} />
-            <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+            {/* All routes now public */}
+            <Route path="/projets" element={<Index />} />
+            <Route path="/cadastre" element={<Cadastre />} />
+            <Route path="/plu" element={<PLU />} />
+            <Route path="/residents" element={<Residents />} />
+            <Route path="/projet" element={<Projet />} />
+            <Route path="/fiche/:ficheId" element={<FicheDetails />} />
+            <Route path="/synthese" element={<Synthese />} />
+            <Route path="/account" element={<Account />} />
             
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />

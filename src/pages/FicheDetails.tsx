@@ -24,7 +24,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { AerialPhoto } from '@/components/synthese/AerialPhoto';
 import { ProjectSummary } from '@/components/synthese/ProjectSummary';
-import { ProjectSummaryNew, type Projet } from '@/components/synthese/ProjectSummaryNew';
 import { HousingDistribution } from '@/components/synthese/HousingDistribution';
 import { ParkingSection } from '@/components/synthese/ParkingSection';
 import { CadastreTab } from '@/components/synthese/CadastreTab';
@@ -33,17 +32,14 @@ import { ProjectTab } from '@/components/synthese/ProjectTab';
 import ImageGallery from '@/components/images/ImageGallery';
 import { PropertyValueTable } from '@/components/residents/PropertyValueTable';
 import { LandSummaryTable } from '@/components/residents/LandSummaryTable';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface Fiche {
   id: string;
   address: string;
-  cadastre_section: string;
-  cadastre_number: string;
+  cadastreSection: string;
+  cadastreNumber: string;
   completion: number;
-  created_at: string;
-  updated_at: string;
+  lastUpdated: string;
   
   zone?: string;
   empriseAuSol?: number;
@@ -82,7 +78,6 @@ export default function FicheDetails() {
   const { ficheId } = useParams<{ ficheId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('cadastre');
   const [isEditing, setIsEditing] = useState(false);
   const [fiche, setFiche] = useState<Fiche | null>(null);
@@ -133,59 +128,55 @@ export default function FicheDetails() {
 
   useEffect(() => {
     const loadFiche = async () => {
-      if (!user || !ficheId) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('fiches')
-          .select('*')
-          .eq('id', ficheId)
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Error fetching fiche:', error);
-          setFiche(null);
-          return;
-        }
-
-        if (data) {
-          setFiche({
-            ...data,
-            zone: 'UA',
-            empriseAuSol: 70,
-            hauteurMax: 14,
-            espacesVerts: 20,
-            stationnement: 'À définir selon la règle',
-            
-            bandePrincipale: '',
-            bandeSecondaire: '',
-            implantationVoies: '',
-            implantationLimites: '',
-            retraitLimites: '',
-            implantationTerrain: '',
-            respirationBati: '',
-            
-            occupants: [
-              { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
-              { type: 'Locataires', nombre: 3, statut: 'Famille' }
-            ],
-            surfacePlancher: 1200,
-            logements: 15,
-            logementsSociaux: 4,
-            logementsTypologies: {
-              t2: 5,
-              t3: 7,
-              t4: 3
-            }
-          });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        const storedFiches = localStorage.getItem('userFiches');
+        if (storedFiches) {
+          const fiches: Fiche[] = JSON.parse(storedFiches);
+          const foundFiche = fiches.find(f => f.id === ficheId);
           
-          // Initialize entries with one default entry
-          handleAddEntry();
+          if (foundFiche) {
+            setFiche({
+              ...foundFiche,
+              zone: foundFiche.zone || 'UA',
+              empriseAuSol: foundFiche.empriseAuSol || 70,
+              hauteurMax: foundFiche.hauteurMax || 14,
+              espacesVerts: foundFiche.espacesVerts || 20,
+              stationnement: foundFiche.stationnement || 'À définir selon la règle',
+              
+              bandePrincipale: foundFiche.bandePrincipale || '',
+              bandeSecondaire: foundFiche.bandeSecondaire || '',
+              implantationVoies: foundFiche.implantationVoies || '',
+              implantationLimites: foundFiche.implantationLimites || '',
+              retraitLimites: foundFiche.retraitLimites || '',
+              implantationTerrain: foundFiche.implantationTerrain || '',
+              respirationBati: foundFiche.respirationBati || '',
+              
+              occupants: foundFiche.occupants || [
+                { type: 'Propriétaire occupant', nombre: 2, statut: 'Retraités' },
+                { type: 'Locataires', nombre: 3, statut: 'Famille' }
+              ],
+              surfacePlancher: foundFiche.surfacePlancher || 1200,
+              logements: foundFiche.logements || 15,
+              logementsSociaux: foundFiche.logementsSociaux || 4,
+              logementsTypologies: foundFiche.logementsTypologies || {
+                t2: 5,
+                t3: 7,
+                t4: 3
+              }
+            });
+            
+            const fiches2 = JSON.parse(storedFiches);
+            const currentFiche = fiches2.find((f: any) => f.id === ficheId);
+            
+            if (currentFiche && currentFiche.cadastreEntries) {
+              setEntries(currentFiche.cadastreEntries);
+            } else {
+              handleAddEntry();
+            }
+          }
         }
       } catch (error) {
         console.error("Erreur lors du chargement de la fiche:", error);
@@ -200,14 +191,14 @@ export default function FicheDetails() {
     };
     
     loadFiche();
-  }, [ficheId, user, toast]);
+  }, [ficheId, toast]);
   
   const handleAddEntry = () => {
     const newEntry: CadastreEntry = {
       id: Math.random().toString(36).substring(2, 9),
-      parcelle: fiche?.cadastre_number || '',
+      parcelle: fiche?.cadastreNumber || '',
       adresse: fiche?.address || '',
-      section: fiche?.cadastre_section || '',
+      section: fiche?.cadastreSection || '',
       surface: '',
     };
     
@@ -377,8 +368,8 @@ export default function FicheDetails() {
     
     const fieldsToCheck = [
       fiche.address, 
-      fiche.cadastre_section, 
-      fiche.cadastre_number,
+      fiche.cadastreSection, 
+      fiche.cadastreNumber,
       fiche.zone,
       fiche.empriseAuSol,
       fiche.hauteurMax,
@@ -507,7 +498,7 @@ export default function FicheDetails() {
             <h1 className="text-3xl font-bold">{fiche.address.split(',')[0]}</h1>
             <p className="text-gray-600 mt-1">{fiche.address}</p>
             <p className="text-gray-500 text-sm mt-1">
-              Parcelle: {fiche.cadastre_section} {fiche.cadastre_number}
+              Parcelle: {fiche.cadastreSection} {fiche.cadastreNumber}
             </p>
           </div>
           
@@ -831,6 +822,7 @@ export default function FicheDetails() {
               <div className="mt-8">
                 <LandSummaryTable
                   ficheId={ficheId}
+                  projectId={projectId}
                   cadastreEntries={entries.map(entry => ({
                     id: entry.id,
                     section: entry.section,
@@ -873,25 +865,15 @@ export default function FicheDetails() {
                 ficheId={ficheId}
               />
               
-              <ProjectSummaryNew 
-                projet={{
-                  surface_fonciere_m2: getTotalSurface(),
-                  cos_pct: projectSummary.cos * 100,
-                  capacite_constructible_m2: projectSummary.capaciteConstructive,
-                  hauteur_moyenne_m: projectSummary.hauteur,
-                  nb_etages_libelle: `R+${projectSummary.etages - 1}`,
-                  capacite_logements_collectifs_m2: projectSummary.capaciteLogements,
-                  logements_libres_m2: projectSummary.logementsLibres * 50, // Approximation surface par logement libre
-                  part_sociale_pct: (projectSummary.logementsSociaux / (projectSummary.logementsLibres + projectSummary.logementsSociaux)) * 100,
-                  logements_sociaux_m2: projectSummary.logementsSociaux * 45, // Approximation surface par logement social
-                  nb_lots_estime: projectSummary.logementsLibres + projectSummary.logementsSociaux,
-                  parkings_requis: projectSummary.stationnementRequis,
-                  espaces_verts_pct: (projectSummary.surfaceEspacesVerts / getTotalSurface()) * 100,
-                  espaces_verts_m2: projectSummary.surfaceEspacesVerts
-                } as Projet}
+              <ProjectSummary 
+                projectSummary={projectSummary}
+                handleSummaryChange={handleSummaryChange}
+                isEditing={isEditing}
+                visibleSections={{ projet: visibleSections.projet }}
+                toggleSection={() => toggleSection('projet')}
               />
               
-              <HousingDistribution
+              <HousingDistribution 
                 projectSummary={projectSummary}
                 handleSummaryChange={handleSummaryChange}
                 isEditing={isEditing}

@@ -81,19 +81,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     shabSocial: 0,
     avgSurfacePerUnitLibre: 60,
     avgSurfacePerUnitSocial: 60,
-    // Surfaces spécifiques par type de projet
-    avgSurfacePerUnitBureaux: 100,
-    avgSurfacePerUnitCommerces: 80,
-    avgSurfacePerUnitLogistique: 200,
-    avgSurfacePerUnitEtudiantsSeniors: 25,
-    avgSurfacePerUnitRehabilitation: 60,
-    avgSurfacePerUnitMixte: 70,
     totalUnitsLibre: 0,
     totalUnitsSocial: 0,
-    internalParkingRatioLibre: 1.5,
-    internalParkingRatioSocial: 1.5,
-    externalParkingRatioLibre: 0,
-    externalParkingRatioSocial: 0,
+    internalParkingRatio: 1.5,
+    externalParkingRatio: 0,
     internalParkingLibre: 0,
     internalParkingSocial: 0,
     externalParkingLibre: 0,
@@ -109,7 +100,7 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
 
   // Recalculate all values when buildings change
   useEffect(() => {
-    // Calculate SDP for each building and totals
+    // Calculate SDP for each building
     const updatedBuildings = buildings.map(building => {
       const calculatedSdp = calculateSdp(
         building.footprint, 
@@ -127,6 +118,8 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
       };
     });
 
+    setBuildings(updatedBuildings);
+
     // Calculate totals
     const totalSdp = updatedBuildings.reduce((sum, building) => sum + building.sdp, 0);
     const socialSdp = updatedBuildings.reduce((sum, building) => sum + building.socialSdp, 0);
@@ -141,10 +134,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
     const totalUnitsSocial = Math.round(shabSocial / totals.avgSurfacePerUnitSocial);
     
     // Calculate parking spots - separately for Libre and Social
-    const internalParkingLibre = Math.round(totalUnitsLibre * totals.internalParkingRatioLibre);
-    const internalParkingSocial = Math.round(totalUnitsSocial * totals.internalParkingRatioSocial);
-    const externalParkingLibre = Math.round(totalUnitsLibre * totals.externalParkingRatioLibre);
-    const externalParkingSocial = Math.round(totalUnitsSocial * totals.externalParkingRatioSocial);
+    const internalParkingLibre = Math.round(totalUnitsLibre * totals.internalParkingRatio);
+    const internalParkingSocial = Math.round(totalUnitsSocial * totals.internalParkingRatio);
+    const externalParkingLibre = Math.round(totalUnitsLibre * totals.externalParkingRatio);
+    const externalParkingSocial = Math.round(totalUnitsSocial * totals.externalParkingRatio);
 
     setTotals(prev => ({
       ...prev,
@@ -165,54 +158,23 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
       onDataChange(updatedBuildings);
     }
   }, [
-    // Only depend on the values that should trigger recalculation, not the entire buildings array
-    JSON.stringify(buildings.map(b => ({ id: b.id, footprint: b.footprint, levels: b.levels, atticCoefficient: b.atticCoefficient, sdpCoefficient: b.sdpCoefficient, socialPercentage: b.socialPercentage }))),
+    buildings, 
     totals.shabCoefficientLibre, 
     totals.shabCoefficientSocial, 
     totals.avgSurfacePerUnitLibre,
     totals.avgSurfacePerUnitSocial,
-    totals.avgSurfacePerUnitBureaux,
-    totals.avgSurfacePerUnitCommerces,
-    totals.avgSurfacePerUnitLogistique,
-    totals.avgSurfacePerUnitEtudiantsSeniors,
-    totals.avgSurfacePerUnitRehabilitation,
-    totals.avgSurfacePerUnitMixte,
-    totals.internalParkingRatioLibre,
-    totals.internalParkingRatioSocial,
-    totals.externalParkingRatioLibre,
-    totals.externalParkingRatioSocial
+    totals.internalParkingRatio,
+    totals.externalParkingRatio
   ]);
 
   // Handle changes to building properties
   const handleBuildingChange = (id: string, field: keyof BuildingEntry, value: any) => {
     setBuildings(prev => 
-      prev.map(building => {
-        if (building.id === id) {
-          const updatedBuilding = {
-            ...building, 
-            [field]: field === 'name' 
-              ? value 
-              : (typeof value === 'string' ? parseFloat(value) || 0 : value)
-          };
-          
-          // Recalculate SDP immediately for this building
-          if (field !== 'name') {
-            const calculatedSdp = calculateSdp(
-              updatedBuilding.footprint, 
-              updatedBuilding.levels, 
-              updatedBuilding.atticCoefficient, 
-              updatedBuilding.sdpCoefficient
-            );
-            const calculatedSocialSdp = calculatedSdp * (updatedBuilding.socialPercentage / 100);
-            
-            updatedBuilding.sdp = parseFloat(calculatedSdp.toFixed(2));
-            updatedBuilding.socialSdp = parseFloat(calculatedSocialSdp.toFixed(2));
-          }
-          
-          return updatedBuilding;
-        }
-        return building;
-      })
+      prev.map(building => 
+        building.id === id 
+          ? { ...building, [field]: typeof value === 'string' ? parseFloat(value) || 0 : value } 
+          : building
+      )
     );
   };
 
@@ -285,23 +247,11 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
             {buildings.map((building) => (
               <TableRow key={building.id}>
                 <TableCell>
-                  <Select 
+                  <Input 
                     value={building.name}
-                    onValueChange={value => handleBuildingChange(building.id, 'name', value)}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Sélectionner un type de projet" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border shadow-lg z-50">
-                      <SelectItem value="Logements">Logements</SelectItem>
-                      <SelectItem value="Bureaux">Bureaux</SelectItem>
-                      <SelectItem value="Logistique">Logistique</SelectItem>
-                      <SelectItem value="Étudiants/Seniors">Étudiants/Seniors</SelectItem>
-                      <SelectItem value="Réhabilitation">Réhabilitation</SelectItem>
-                      <SelectItem value="Commerces">Commerces</SelectItem>
-                      <SelectItem value="Mixte">Mixte</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    onChange={e => handleBuildingChange(building.id, 'name', e.target.value)}
+                    className="text-center"
+                  />
                 </TableCell>
                 <TableCell>
                   <Input 
@@ -329,17 +279,8 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="0">0</SelectItem>
-                      <SelectItem value="0.5">0.50</SelectItem>
-                      <SelectItem value="0.55">0.55</SelectItem>
-                      <SelectItem value="0.6">0.60</SelectItem>
-                      <SelectItem value="0.65">0.65</SelectItem>
-                      <SelectItem value="0.7">0.70</SelectItem>
-                      <SelectItem value="0.75">0.75</SelectItem>
-                      <SelectItem value="0.8">0.80</SelectItem>
+                      <SelectItem value="0.45">0.45</SelectItem>
                       <SelectItem value="0.85">0.85</SelectItem>
-                      <SelectItem value="0.9">0.90</SelectItem>
-                      <SelectItem value="0.95">0.95</SelectItem>
-                      <SelectItem value="1">1.00</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableCell>
@@ -511,45 +452,6 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                   </Select>
                 </TableCell>
               </TableRow>
-              
-              {/* Lignes conditionnelles pour chaque type de projet non-logement */}
-              {['Bureaux', 'Commerces', 'Logistique', 'Étudiants/Seniors', 'Réhabilitation', 'Mixte'].map(projectType => {
-                const hasThisProject = buildings.some(building => building.name === projectType);
-                if (!hasThisProject) return null;
-                
-                const fieldName = `avgSurfacePerUnit${projectType.replace('/', '').replace('-', '')}` as keyof typeof totals;
-                const surfaceRange = projectType === 'Logistique' ? 
-                  Array.from({ length: 39 }, (_, i) => (i + 5) * 20) : // 100-800 m² par pas de 20
-                  Array.from({ length: 39 }, (_, i) => (i + 2) * 10); // 20-400 m² par pas de 10
-                
-                return (
-                  <TableRow key={projectType}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col">
-                        <span>Surface moyenne par</span>
-                        <span>{projectType.toLowerCase()}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell colSpan={2}>
-                      <Select 
-                        value={totals[fieldName]?.toString() || '100'} 
-                        onValueChange={value => handleTotalChange(fieldName, parseFloat(value))}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-[200px] overflow-y-auto">
-                          {surfaceRange.map((size) => (
-                            <SelectItem key={size} value={size.toString()}>
-                              {size} m²
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
               <TableRow>
                 <TableCell className="font-medium">Logements</TableCell>
                 <TableCell className="text-center font-medium">
@@ -566,29 +468,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     <span>intérieures par logt</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell colSpan={2}>
                   <Select 
-                    value={totals.internalParkingRatioLibre.toString()} 
-                    onValueChange={value => handleTotalChange('internalParkingRatioLibre', parseFloat(value))}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">0</SelectItem>
-                      <SelectItem value="0.5">0.5</SelectItem>
-                      <SelectItem value="1">1</SelectItem>
-                      <SelectItem value="1.5">1.5</SelectItem>
-                      <SelectItem value="2">2</SelectItem>
-                      <SelectItem value="2.5">2.5</SelectItem>
-                      <SelectItem value="3">3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={totals.internalParkingRatioSocial.toString()} 
-                    onValueChange={value => handleTotalChange('internalParkingRatioSocial', parseFloat(value))}
+                    value={totals.internalParkingRatio.toString()} 
+                    onValueChange={value => handleTotalChange('internalParkingRatio', parseFloat(value))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />
@@ -612,29 +495,10 @@ export const ProjectConfigTable = ({ initialData, onDataChange }: ProjectConfigT
                     <span>extérieures par logt</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell colSpan={2}>
                   <Select 
-                    value={totals.externalParkingRatioLibre.toString()} 
-                    onValueChange={value => handleTotalChange('externalParkingRatioLibre', parseFloat(value))}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">0</SelectItem>
-                      <SelectItem value="0.5">0.5</SelectItem>
-                      <SelectItem value="1">1</SelectItem>
-                      <SelectItem value="1.5">1.5</SelectItem>
-                      <SelectItem value="2">2</SelectItem>
-                      <SelectItem value="2.5">2.5</SelectItem>
-                      <SelectItem value="3">3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-                <TableCell>
-                  <Select 
-                    value={totals.externalParkingRatioSocial.toString()} 
-                    onValueChange={value => handleTotalChange('externalParkingRatioSocial', parseFloat(value))}
+                    value={totals.externalParkingRatio.toString()} 
+                    onValueChange={value => handleTotalChange('externalParkingRatio', parseFloat(value))}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue />

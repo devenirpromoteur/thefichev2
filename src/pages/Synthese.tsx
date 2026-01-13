@@ -13,9 +13,7 @@ import { ParkingSection } from '@/components/synthese/ParkingSection';
 import { CadastreTab } from '@/components/synthese/CadastreTab';
 import { ResidentsTab } from '@/components/synthese/ResidentsTab';
 import { ProjectTab } from '@/components/synthese/ProjectTab';
-import { EnhancedSynthesePageHeader } from '@/components/synthese/EnhancedSynthesePageHeader';
-import { SynthesisData } from '@/hooks/useSynthesisExport';
-import { supabase } from '@/integrations/supabase/client';
+import { SynthesePageHeader } from '@/components/synthese/SynthesePageHeader';
 
 // Données fictives pour la démonstration
 const projectData = {
@@ -50,38 +48,6 @@ const Synthese = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [showImage, setShowImage] = useState(true);
   const { toast } = useToast();
-
-  // Enhanced synthesis data structure
-  const [synthesisData, setSynthesisData] = useState<SynthesisData>({
-    projectInfo: {
-      name: "Projet de logements - Rue des Lilas",
-      address: "15-17 rue des Lilas",
-      date: new Date().toISOString().split('T')[0]
-    },
-    cadastre: projectData.cadastre,
-    projectSummary: {
-      perimetre: 970,
-      capaciteConstructive: 1200,
-      cos: 1.24,
-      hauteur: 12,
-      etages: 4,
-      capaciteLogements: 1050,
-      logementsLibres: 11,
-      logementsSociaux: 4,
-      stationnementRequis: 18,
-      stationnementPrevu: 20,
-      stationnementExterieur: 12,
-      stationnementInterieur: 8,
-      surfaceBatimentPrincipal: 850,
-      surfaceBatimentsAnnexes: 200,
-      surfaceEspacesVerts: 320
-    },
-    housingDistribution: {
-      t2: 5,
-      t3: 7,
-      t4: 3
-    }
-  });
 
   // Cadastre state
   const [cadastreEntries, setCadastreEntries] = useState(projectData.cadastre);
@@ -161,15 +127,6 @@ const Synthese = () => {
       ...projectSummary,
       [field]: value
     });
-    
-    // Update synthesis data
-    setSynthesisData(prev => ({
-      ...prev,
-      projectSummary: {
-        ...prev.projectSummary,
-        [field]: value
-      }
-    }));
   };
 
   const toggleSection = (section: keyof typeof visibleSections) => {
@@ -189,71 +146,16 @@ const Synthese = () => {
     }
   };
 
-  const handleDataImport = (importedData: SynthesisData) => {
-    setSynthesisData(importedData);
-    setProjectSummary(importedData.projectSummary);
-    setCadastreEntries(importedData.cadastre);
-    toast({
-      title: "Données importées",
-      description: "La synthèse a été mise à jour avec les données importées."
-    });
-  };
-
-  const handleCreateFiche = async (data: SynthesisData) => {
-    try {
-      // We need a user_id for the fiche creation
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('User not authenticated');
-      }
-
-      const { data: newFiche, error } = await supabase
-        .from('fiches')
-        .insert({
-          address: data.projectInfo.address,
-          cadastre_section: data.cadastre[0]?.section || '',
-          cadastre_number: data.cadastre[0]?.parcelle || '',
-          completion: 50,
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      toast({
-        title: "Fiche créée",
-        description: `Nouvelle fiche créée: ${newFiche.address}`
-      });
-    } catch (error) {
-      toast({
-        title: "Erreur",
-        description: "Impossible de créer la fiche.",
-        variant: "destructive"
-      });
-    }
-  };
-
   return (
     <PageLayout>
       <div className="space-y-6 animate-fade-in">
-        <EnhancedSynthesePageHeader 
+        <SynthesePageHeader 
           isEditing={isEditing} 
           toggleEditing={toggleEditing} 
+          handleDownload={handleDownload}
           handlePrint={handlePrint}
           handleShare={handleShare}
-          synthesisData={synthesisData}
-          onDataImport={handleDataImport}
-          onCreateFiche={handleCreateFiche}
         />
-
-        <div id="synthesis-content" className="space-y-6 print:space-y-4">
-          {/* Print header */}
-          <div className="print-show hidden print:block print-header">
-            <div className="print-title">{synthesisData.projectInfo.name}</div>
-            <div className="print-subtitle">{synthesisData.projectInfo.address}</div>
-            <div className="text-sm">Date: {new Date().toLocaleDateString('fr-FR')}</div>
-          </div>
 
         <Tabs defaultValue="apercu" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
@@ -263,57 +165,47 @@ const Synthese = () => {
             <TabsTrigger value="projet">Projet immobilier</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="apercu" className="space-y-4 mt-4 print:space-y-2">
+          <TabsContent value="apercu" className="space-y-4 mt-4">
             {/* Photo aérienne */}
-            <div className="print-section">
-              <AerialPhoto showImage={showImage} setShowImage={setShowImage} />
-            </div>
+            <AerialPhoto showImage={showImage} setShowImage={setShowImage} />
 
             {/* Parcelles cadastrales */}
-            <div className="print-section">
-              <CadastreSection 
-                entries={cadastreEntries}
-                setEntries={setCadastreEntries}
-                selectedRow={selectedCadastreRow}
-                setSelectedRow={setSelectedCadastreRow}
-                isEditing={isEditing}
-                visibleSections={{ cadastre: visibleSections.cadastre }}
-                toggleSection={() => toggleSection('cadastre')}
-              />
-            </div>
+            <CadastreSection 
+              entries={cadastreEntries}
+              setEntries={setCadastreEntries}
+              selectedRow={selectedCadastreRow}
+              setSelectedRow={setSelectedCadastreRow}
+              isEditing={isEditing}
+              visibleSections={{ cadastre: visibleSections.cadastre }}
+              toggleSection={() => toggleSection('cadastre')}
+            />
 
             {/* Résumé du projet */}
-            <div className="print-section">
-              <ProjectSummary 
-                projectSummary={projectSummary}
-                handleSummaryChange={handleSummaryChange}
-                isEditing={isEditing}
-                visibleSections={{ projet: visibleSections.projet }}
-                toggleSection={() => toggleSection('projet')}
-              />
-            </div>
+            <ProjectSummary 
+              projectSummary={projectSummary}
+              handleSummaryChange={handleSummaryChange}
+              isEditing={isEditing}
+              visibleSections={{ projet: visibleSections.projet }}
+              toggleSection={() => toggleSection('projet')}
+            />
 
             {/* Répartition des logements */}
-            <div className="print-section">
-              <HousingDistribution 
-                projectSummary={projectSummary}
-                handleSummaryChange={handleSummaryChange}
-                isEditing={isEditing}
-                visibleSections={{ logements: visibleSections.logements }}
-                toggleSection={() => toggleSection('logements')}
-              />
-            </div>
+            <HousingDistribution 
+              projectSummary={projectSummary}
+              handleSummaryChange={handleSummaryChange}
+              isEditing={isEditing}
+              visibleSections={{ logements: visibleSections.logements }}
+              toggleSection={() => toggleSection('logements')}
+            />
 
             {/* Stationnement */}
-            <div className="print-section">
-              <ParkingSection 
-                projectSummary={projectSummary}
-                handleSummaryChange={handleSummaryChange}
-                isEditing={isEditing}
-                visibleSections={{ stationnement: visibleSections.stationnement }}
-                toggleSection={() => toggleSection('stationnement')}
-              />
-            </div>
+            <ParkingSection 
+              projectSummary={projectSummary}
+              handleSummaryChange={handleSummaryChange}
+              isEditing={isEditing}
+              visibleSections={{ stationnement: visibleSections.stationnement }}
+              toggleSection={() => toggleSection('stationnement')}
+            />
           </TabsContent>
           
           <TabsContent value="cadastre" className="space-y-4 mt-4">
@@ -328,7 +220,6 @@ const Synthese = () => {
             <ProjectTab projectData={projectData} />
           </TabsContent>
         </Tabs>
-        </div>
       </div>
     </PageLayout>
   );

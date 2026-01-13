@@ -4,7 +4,6 @@ import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, FileText, Calendar, Search } from 'lucide-react';
@@ -23,15 +22,12 @@ const Projets = () => {
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const { user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      fetchProjects();
-    }
-  }, [user]);
+    fetchProjects();
+  }, []);
 
   useEffect(() => {
     // Filter projects based on search query
@@ -72,12 +68,13 @@ const Projets = () => {
   };
 
   const createNewProject = async () => {
-    if (!user) return;
-
+    // Sans authentification, on utilise un ID générique pour owner_id
+    const genericOwnerId = 'anonymous-user';
+    
     const newProject = {
       name: `Nouveau projet ${new Date().toLocaleDateString('fr-FR')}`,
       description: 'Description du projet...',
-      owner_id: user.id,
+      owner_id: genericOwnerId,
     };
 
     try {
